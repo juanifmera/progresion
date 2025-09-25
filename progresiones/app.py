@@ -4,6 +4,12 @@ import base64
 import os
 import copy
 
+st.set_page_config(
+    layout='wide',
+    page_title='Carrefour Tool Box',
+    page_icon='📊'
+)
+
 def convertir_a_dict(obj):
     if isinstance(obj, dict):
         return {k: convertir_a_dict(v) for k, v in obj.items()}
@@ -43,14 +49,7 @@ if authentication_status:
     st.sidebar.title(f'CGD Tool Box - {username}')
     st.sidebar.success(f"Bienvenido, {name} 👋")
     st.sidebar.info("Navegá entre las páginas desde la barra lateral")
-    authenticator.logout("Cerrar sesión", "sidebar")
-
-    # 🎨 Configuración inicial
-    st.set_page_config(
-        layout='wide',
-        page_title='Carrefour Tool Box',
-        page_icon='📊'
-    )
+    authenticator.logout("Cerrar sesión", "sidebar", use_container_width=True)
 
     # 🎯 Encabezado
     st.markdown(
@@ -91,18 +90,14 @@ if authentication_status:
     with col1:
         st.markdown("### 📊 Progresiones MMAA")
         st.markdown("Analiza ventas, volumen y débitos a nivel compañia por mes cerrado con comparabilidad (SC).")
-        st.button("Ir a Progresiones", use_container_width=True, )
 
     with col2:
         st.markdown("### 🏪 Progresiones Acumuladas")
         st.markdown("Analiza ventas, volumen y débitos por Formato en base a un periodo acumulado con comparabilidad (SC).")
-        st.button("Ir a Padrones", use_container_width=True)
 
     with col3:
         st.markdown("### 🔧 Comparacion Tiendas")
         st.markdown("Compara ventas, volumen y débitos por periodo acumulado con comparabilidad (SC) contra el formato total.")
-        st.button("Explorar", use_container_width=True)
-
 
     st.markdown(
         """
