@@ -83,7 +83,7 @@ if ventas_y_volumen and debitos and padron:
             st.session_state["df_final"] = df_final
             st.success('✅ Consolidación exitosa')
         else:
-            st.error("❌ No se pudo generar el DataFrame")
+            st.error(f"❌ No se pudo generar el DataFrame. {df_final}")
 
 
 # ================== TERCER BLOQUE: FILTROS Y GRÁFICO ==================
