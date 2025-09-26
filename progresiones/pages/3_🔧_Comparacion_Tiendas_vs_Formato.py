@@ -108,13 +108,11 @@ if ventas_y_volumen and debitos and padron:
 
         if tiendas and categoria:
             fig = actualizo_df_comparacion(df_final=df_final, tiendas=tiendas, categoria=categoria)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, key='original')
 
-            if tiendas or categoria:
-                st.rerun()
-
-            st.write("Valores únicos en categoria:", df_final["categoria"].unique())
-            st.write("Ejemplo de punto_operacional:", df_final["punto_operacional"].unique()[:10])
+            if tiendas!=tiendas or categoria!=categoria:
+                actualizo_df_comparacion(df_final=df_final, tiendas=tiendas, categoria=categoria)
+                st.plotly_chart(fig, use_container_width=True, key='actualizado')
 
         else:
             st.info("⚠️ Seleccioná al menos una tienda y una categoría para ver el gráfico.")

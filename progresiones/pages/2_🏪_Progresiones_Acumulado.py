@@ -1,6 +1,6 @@
 import streamlit as st
 from datetime import datetime
-from utils.utils import progresiones_acumulado, proteger_pagina
+from utils.utils import progresiones_acumulado, proteger_pagina, obtener_join
 
 st.set_page_config(layout='wide')
 proteger_pagina()
@@ -66,11 +66,11 @@ if ventas_y_volumen and debitos and padron:
 
     mes = st.selectbox('Elegir un mes para realizar la comparabilidad de calculos para las progresiones y seleccionar el periodo acumulado deseado.', meses, index=datetime.today().month - 2, placeholder=mes_actual)
 
-    calculate = st.button('¡¡¡Calcular Progresiones Acumuladas!!!', type='primary', width='stretch')
+    calculate = st.button('¡¡¡Calcular Progresiones Acumuladas!!!', type='primary', use_container_width=True)
 
     if calculate:
         with st.spinner("🔄 Calculando progresiones y generando archivo Excel (Tiempo Estimado 15 Segundos)"):
-            excel_file = progresiones_acumulado(ventas_y_volumen, debitos, padron, mes)
+            excel_file = obtener_join(ventas_y_volumen, debitos, padron, mes)
 
             if isinstance(excel_file, str):
                 st.error(excel_file)

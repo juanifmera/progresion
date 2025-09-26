@@ -55,18 +55,13 @@ with st.container(border=True):
 
     if archivo_a_convertir is not None:
         parquet_file = exporto_parquet(archivo_a_convertir) #type:ignore
-        descargar_parquet = st.download_button('Descargar Archivo en formato Parquet',file_name=f'{os.path.splitext(nombre)[0]}.parquet', data=parquet_file, mime="application/octet-stream", width='stretch', type='primary')
+        descargar_parquet = st.download_button('Descargar Archivo en formato Parquet',file_name=f'{os.path.splitext(nombre)[0]}.parquet', data=parquet_file, mime="application/octet-stream", use_container_width=True, type='primary')
 
         if descargar_parquet:
             original_size = archivo_a_convertir.size  # en bytes
             parquet_size = len(parquet_file.getbuffer())  #type:ignore
 
-            st.success(
-                f"📊 Comparativa de tamaños:\n\n"
-                f"- Archivo original: **{format_size(original_size)}**\n"
-                f"- Archivo Parquet: **{format_size(parquet_size)}**\n"
-                f"➡️ ¡Reducción de **{100 - (parquet_size/original_size*100):.2f}%**!"
-            )
+            st.success('Archivo convertido existosamente')
 
     else:
         st.write('Una vez que hayas subido el archivo podras convertirlo a Parquet')
