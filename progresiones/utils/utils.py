@@ -323,8 +323,8 @@ def exporto_parquet(df: pd.DataFrame):
 def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str): 
     try:
         # Carga de Archivos y transformaciones generales
-        df_ventas_y_volumen = pd.read_csv(ventas, encoding='utf-8', header=1)
-        df_debitos = pd.read_csv(debitos, encoding='utf-8', header=1, sep=',', decimal=',')
+        df_ventas_y_volumen = pd.read_csv(ventas, encoding='utf-16', header=1)
+        df_debitos = pd.read_csv(debitos, encoding='utf-16', header=1, sep=',', decimal=',')
         padron = pd.read_excel(padron, header=17) #type:ignore
 
         # Trabajo sobre Ventas y Volumen
@@ -424,8 +424,8 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         # Genero una funcion para convertir los valores de una columna a mayuscula
         def maysc(df: pd.DataFrame, columna: str):
             df[columna] = df[columna].str.upper()
-        #Aplico la formula a la columna del mes comparable para que todos los valores sean en mayuscula
 
+        #Aplico la formula a la columna del mes comparable para que todos los valores sean en mayuscula
         maysc(padron, mes_comparable[0:3].lower())
 
         # Coloco el numero operacional como numero
@@ -444,14 +444,14 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         # Me quedo unicamente con las columnas que me sirven del DF Joineado (ACA TENGO LA SC DEL MES)
         df_join = df_join[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'fecha_apertura', 'fin_de_cierre', 'provincia','categoria', 'valores', mes_comparable[0:3].lower()]]
 
-        # Filtro unicamente las lineas que sean Superficie Comparable
-        df_join_sc = df_join[df_join[mes_comparable[0:3].lower()] == 'SC']
-
         #Renombro la Columna Mes a Fecha para Luego generar la Columna Mes Correspondiente
-        df_join_sc.rename(columns={
+        df_join.rename(columns={
             'mes':'fecha'
         }, inplace=True)
-        df_join_sc['mes'] = df_join_sc['fecha'].str.split(' ').str[0]
+        df_join['mes'] = df_join['fecha'].str.split(' ').str[0]
+
+        # Filtro unicamente las lineas que sean Superficie Comparable
+        df_join_sc = df_join[df_join[mes_comparable[0:3].lower()] == 'SC']
 
         #Agrupo el df por categoria teniendo en cuenta el mes, ya que este me servirá luego para limitar el periodo comparable y la superficie comparable
         df_acum_formato = df_join_sc.groupby(['año', 'mes', 'direccion', 'categoria'])['valores'].sum().reset_index().pivot_table(values='valores', index=['mes', 'categoria'], columns='año', aggfunc='sum').reset_index()
@@ -863,3 +863,149 @@ def actualizo_df_comparacion(df_final:pd.DataFrame, tiendas:list, categoria:str)
         
         except Exception as e:
             return e
+        
+def obtener_join(ventas, debitos, padron, mes_comparable:str): 
+    try:
+        # Carga de Archivos y transformaciones generales
+        df_ventas_y_volumen = pd.read_csv(ventas, encoding='utf-16', header=1)
+        df_debitos = pd.read_csv(debitos, encoding='utf-16', header=1, sep=',', decimal=',')
+        padron = pd.read_excel(padron, header=17) #type:ignore
+
+        # Trabajo sobre Ventas y Volumen
+        #Me quedo unicamente con las columnas importantes
+        df_ventas_y_volumen = df_ventas_y_volumen[['Año', 'Mes', 'Direccion', 'Punto Operacional', 'Sector', 'Seccion', 'Grupo de Familia', 'Ventas c/impuesto', 'Venta en Unidades']]
+
+        #Renombro las columnas
+        df_ventas_y_volumen.columns = (df_ventas_y_volumen.columns.str.strip().str.lower().str.replace(" ", "_"))
+        df_ventas_y_volumen.rename(columns={
+        'ventas_c/impuesto':'venta',
+        'venta_en_unidades':'volumen'
+        }, inplace=True)
+
+        #Genero una columna para Obtener el ID tienda
+        df_ventas_y_volumen['numero_operacional'] = df_ventas_y_volumen['punto_operacional'].str.split('-').str[0]
+
+        #Me quedo con las columnas necesarias
+        ventas = df_ventas_y_volumen[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'sector', 'seccion', 'grupo_de_familia', 'venta']]
+        volumen = df_ventas_y_volumen[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'sector', 'seccion', 'grupo_de_familia', 'volumen']]
+
+        #Quito los NA de las columans de valores
+        ventas.dropna(subset=['venta'], how='any', inplace=True)
+        volumen.dropna(subset=['volumen'], how='any', inplace=True)
+
+        #Realizo transformaciones para quitar carateres y convertir las columnas a valores numericos
+        ventas['venta'] = ventas['venta'].str.replace('.','').str.replace(',','.').astype('float')
+        volumen['volumen'] = volumen['volumen'].str.split(',').str[0].str.replace('.','').astype('int')
+
+        #Renombro las columnas con valores de ambos DF
+        ventas.rename(columns={
+        'venta':'valores'
+        }, inplace=True)
+
+        volumen.rename(columns={
+        'volumen':'valores'
+        }, inplace=True)
+
+        #Categorizo los valores tanto de volumne como de Ventas
+        ventas['categoria'] = 'VCT'
+        volumen['categoria'] = 'VOL'
+
+        #Agrupo las ventas
+        ventas_agrupado = ventas.groupby(['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria'])['valores'].sum().reset_index()
+
+        #Quito Envases del Volumen y Agrupo
+        volumen_sin_vol = volumen[~volumen['grupo_de_familia'].str.contains('ENVASES')]
+        volumen_agrupado = volumen_sin_vol.groupby(['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria'])['valores'].sum().reset_index()
+
+        # Trabajo sobre Debitos
+        # Renombro el DF
+        debitos_agrupados = df_debitos
+
+        # Renombro las columnas como corresponden
+        debitos_agrupados.columns = debitos_agrupados.columns.str.lower().str.replace(' ','_')
+        debitos_agrupados.rename(columns={
+        'cant._tickets_por_local':'valores'
+        }, inplace=True)
+
+        # Renombro la columna de Debitos a valores
+        debitos_agrupados['categoria'] = 'DEB'
+
+        # Genero una columna Categorica
+        debitos_agrupados['numero_operacional'] = debitos_agrupados['punto_operacional'].str.split('-').str[0]
+
+        # Genero columna para el ID tienda
+        debitos_agrupados = debitos_agrupados[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria', 'valores']]
+
+        # Quito nulos numericos de la columna valores
+        debitos_agrupados.dropna(subset=['valores'], how='any', inplace=True)
+
+        # Convierto la columna de valores a su tipo de datos correspondiente
+        debitos_agrupados['valores'] = debitos_agrupados['valores'].str.replace('.','').astype(int)
+
+        # Trabajo sobre el padron
+        # Selecciono las columnas que me sirven del padron
+        padron = padron[['N°', 'NOMBRE', 'Fecha apertura', 'ORGANIZACIÓN ', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']] #type:ignore
+
+        # Cambio de nombres en el padron
+        padron.columns = (
+        padron.columns
+        .str.lower()
+        .str.strip()
+        .str.replace(' ', '_', regex=False)
+        .str.replace('m²', 'm', regex=False)
+        .str.replace('.2','')
+        )
+
+        # Formateo la fecha para que tenga sentido
+        padron['fecha_apertura'] = padron['fecha_apertura'].dt.strftime('%d/%m/%Y')
+
+        # Cambio el nombre de la columna N por "Numero Operacional"
+        padron.rename(columns={'n°':'numero_operacional'}, inplace=True)
+
+        # Quito los valores nulos utilizando como referencia la columna Numero Operacional, nombre y fecha apertura
+        padron.dropna(subset=['numero_operacional', 'nombre', 'fecha_apertura', mes_comparable[0:3].lower()], how='any', inplace=True)
+
+        # Genero una funcion para convertir los valores de una columna a mayuscula
+        def maysc(df: pd.DataFrame, columna: str):
+            df[columna] = df[columna].str.upper()
+
+        #Aplico la formula a la columna del mes comparable para que todos los valores sean en mayuscula
+        maysc(padron, mes_comparable[0:3].lower())
+
+        # Coloco el numero operacional como numero
+        padron['numero_operacional'] = padron['numero_operacional'].astype(int)
+
+        # Concateno todos los df (venta, debito y volumen) y lo joineo con el padron
+        df = pd.concat([ventas_agrupado, volumen_agrupado, debitos_agrupados])
+
+        # Convierto el ID a numero
+        df['numero_operacional'] = df['numero_operacional'].astype(int)
+
+        # Genero el Join del df Agupado con el Padron con el objetivo de quedarme unicamente con aquellas tiendas Comparables
+        df_join = df.merge(padron, how='left', on='numero_operacional')
+
+        # Trabajo sobre Progresiones Total Formato
+        # Me quedo unicamente con las columnas que me sirven del DF Joineado (ACA TENGO LA SC DEL MES)
+        df_join = df_join[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'fecha_apertura', 'fin_de_cierre', 'provincia','categoria', 'valores', mes_comparable[0:3].lower()]]
+
+        #Renombro la Columna Mes a Fecha para Luego generar la Columna Mes Correspondiente
+        df_join.rename(columns={
+            'mes':'fecha'
+        }, inplace=True)
+        df_join['mes'] = df_join['fecha'].str.split(' ').str[0]
+
+        try:
+            # Exporto todas las tablas a un archivo Excel en memoria
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df_join.to_excel(writer, sheet_name=f"Data COnsolidada - SC", index=False)
+
+            output.seek(0)
+            return output
+
+        except Exception as e:
+            print(e)
+            return None
+
+    except Exception as e:
+        return f'Hubo un error en el medio del flujo/pipeline. Detalle del error: {e}'
