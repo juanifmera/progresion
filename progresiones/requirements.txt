@@ -3,3 +3,4 @@ streamlit_authenticator
 datetime
 plotly
 chardet
+openpyxl
