@@ -322,10 +322,25 @@ def exporto_parquet(df: pd.DataFrame):
 
 def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str): 
     try:
-        # Carga de Archivos y transformaciones generales
-        df_ventas_y_volumen = pd.read_csv(ventas, encoding='utf-16', header=1)
-        df_debitos = pd.read_csv(debitos, encoding='utf-16', header=1, sep=',', decimal=',')
-        padron = pd.read_excel(padron, header=17) #type:ignore
+        try:
+            ventas.seek(0)
+            df_ventas_y_volumen = pd.read_csv(ventas, encoding='utf-16', header=1)
+        except Exception as e:
+            return f'Error en ventas. {e}'
+
+        try:
+            debitos.seek(0)
+            df_debitos = pd.read_csv(debitos, encoding='utf-16', header=1, sep=',', decimal=',')
+        except Exception as e:
+            return f'Error en debitos. {e}'
+
+        try:
+            padron.seek(0)
+            df_padron = pd.read_excel(padron, header=17)
+            padron = df_padron
+
+        except Exception as e:
+            return f'Error en padron. {e}'
 
         # Trabajo sobre Ventas y Volumen
         #Me quedo unicamente con las columnas importantes

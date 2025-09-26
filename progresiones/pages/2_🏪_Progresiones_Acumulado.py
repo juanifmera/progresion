@@ -51,14 +51,6 @@ st.markdown('Una vez que esten subidos los tres archivo, debajo aparecerá una l
 
 if ventas_y_volumen and debitos and padron:
 
-    import pandas as pd
-
-    st.dataframe(pd.read_csv(ventas_y_volumen, encoding='utf-16', header=1).head())
-    st.dataframe(pd.read_csv(debitos, encoding='utf-16', header=1).head())
-    st.dataframe(pd.read_excel(padron, header=17).head())
-    st.write(pd.read_excel(padron, header=17).columns.tolist())
-
-
     # datetime.today().month devuelve 1-12, por eso restamos 1 para el índice
     meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
@@ -80,5 +72,5 @@ if ventas_y_volumen and debitos and padron:
                     "📥 Descargar Excel",
                     data=excel_file,
                     file_name=f"Progresiones Acumulado - {mes}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True
     )
