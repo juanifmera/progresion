@@ -323,8 +323,8 @@ def exporto_parquet(df: pd.DataFrame):
 def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str): 
     try:
         # Carga de Archivos y transformaciones generales
-        df_ventas_y_volumen = pd.read_csv(ventas, encoding='utf-16', header=1)
-        df_debitos = pd.read_csv(debitos, encoding='utf-16', header=1, sep=',', decimal=',')
+        df_ventas_y_volumen = pd.read_csv(ventas, encoding='utf-8', header=1)
+        df_debitos = pd.read_csv(debitos, encoding='utf-8', header=1, sep=',', decimal=',')
         padron = pd.read_excel(padron, header=17) #type:ignore
 
         # Trabajo sobre Ventas y Volumen
@@ -616,29 +616,28 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         acumulado_venta_volumen_total = acumulado_venta_volumen.groupby(['año', 'mes', 'direccion', 'punto_operacional', 'sector', 'seccion', 'grupo_de_familia', 'categoria'])['valores'].sum().reset_index()
 
         try:
-            # Exporto todas las tablas a un archivo Excel en memoria
             output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df_acum_formato.to_excel(writer, sheet_name=f"Prog Acum {df_join_sc['direccion'].unique()[0]} - SC", index=False)
-                df_acum_provincia.to_excel(writer, sheet_name=f"Prog Acum Provincia - SC", index=True)
-                df_acum_tiendas.to_excel(writer, sheet_name=f"Prog Acum tiendas - SC", index=True)
-                acumulado_venta_volumen_sector.to_excel(writer, sheet_name=f"Prog Acum Sector - SC", index=True)
-                acumulado_venta_volumen_seccion.to_excel(writer, sheet_name=f"Prog Acum Seccion - SC", index=True)
-                acumulado_venta_volumen_grupo_de_familia.to_excel(writer, sheet_name=f"Prog Acum GF - SC", index=True)
-                acumulado_venta_volumen_tienda_sector.to_excel(writer, sheet_name=f"Prog Acum TSect - SC", index=True)
-                acumulado_venta_volumen_tienda_seccion.to_excel(writer, sheet_name=f"Prog Acum TSecc - SC", index=True)
-                acumulado_venta_volumen_tienda_grupo_de_familia.to_excel(writer, sheet_name=f"Prog Acum TGf - SC", index=True)
-                acumulado_venta_volumen_total.to_excel(writer, sheet_name=f"Prog Aperturado x Tienda - SC", index=False)
+            with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                df_acum_formato.to_excel(writer, sheet_name=f"Prog Acum {df_join_sc['direccion'].unique()[0]} - SC", index=True)
+                df_acum_provincia.to_excel(writer, sheet_name="Prog Acum Provincia - SC", index=True)
+                df_acum_tiendas.to_excel(writer, sheet_name="Prog Acum Tiendas - SC", index=True)
+                acumulado_venta_volumen_sector.to_excel(writer, sheet_name="Prog Acum Sector - SC", index=True)
+                acumulado_venta_volumen_seccion.to_excel(writer, sheet_name="Prog Acum Seccion - SC", index=True)
+                acumulado_venta_volumen_grupo_de_familia.to_excel(writer, sheet_name="Prog Acum GF - SC", index=True)
+                acumulado_venta_volumen_tienda_sector.to_excel(writer, sheet_name="Prog Acum TSect - SC", index=True)
+                acumulado_venta_volumen_tienda_seccion.to_excel(writer, sheet_name="Prog Acum TSecc - SC", index=True)
+                acumulado_venta_volumen_tienda_grupo_de_familia.to_excel(writer, sheet_name="Prog Acum TGf - SC", index=True)
+                acumulado_venta_volumen_total.to_excel(writer, sheet_name="Prog Aperturado x Tienda - SC", index=True)
 
             output.seek(0)
+            print(f"Tamaño del archivo en memoria: {len(output.getvalue())} bytes")
             return output
 
         except Exception as e:
-            print(e)
-            return None
+            return f'Error a la hora de guardar excel en memoria. Error: {e}'
 
     except Exception as e:
-        return f'Hubo un error en el medio del flujo/pipeline. Detalle del error: {e}'
+        return f'Error a la hora de generar calculos. Error: {e}'
     
 def genero_df_comparacion(ventas, debitos, padron, mes_comparable:str):
     try:

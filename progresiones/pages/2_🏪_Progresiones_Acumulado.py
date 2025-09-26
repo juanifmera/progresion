@@ -50,6 +50,15 @@ st.subheader('Ya casi Estamos ...', divider='rainbow')
 st.markdown('Una vez que esten subidos los tres archivo, debajo aparecerá una lista de meses para seleccionar. Este campo sera utilizado para realizar la comparabilidad de superficies entre tiendas y seleccionar el periodo acumulado deseado.')
 
 if ventas_y_volumen and debitos and padron:
+
+    import pandas as pd
+
+    st.dataframe(pd.read_csv(ventas_y_volumen, encoding='utf-16', header=1).head())
+    st.dataframe(pd.read_csv(debitos, encoding='utf-16', header=1).head())
+    st.dataframe(pd.read_excel(padron, header=17).head())
+    st.write(pd.read_excel(padron, header=17).columns.tolist())
+
+
     # datetime.today().month devuelve 1-12, por eso restamos 1 para el índice
     meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
@@ -62,7 +71,14 @@ if ventas_y_volumen and debitos and padron:
     if calculate:
         with st.spinner("🔄 Calculando progresiones y generando archivo Excel (Tiempo Estimado 15 Segundos)"):
             excel_file = progresiones_acumulado(ventas_y_volumen, debitos, padron, mes)
-            if excel_file:
-                st.divider()
-                st.success(f'Archivo generado con exito. Porfavor descargarlo')
-                st.download_button("📥 Descargar Excel", data=excel_file, file_name=f"Progresiones Acumulado - {mes}.xlsx", width='stretch', type='primary')
+
+            if isinstance(excel_file, str):
+                st.error(excel_file)
+
+            elif excel_file:
+                st.download_button(
+                    "📥 Descargar Excel",
+                    data=excel_file,
+                    file_name=f"Progresiones Acumulado - {mes}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
