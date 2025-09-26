@@ -107,3 +107,6 @@ if authentication_status:
         """,
         unsafe_allow_html=True
     )
+
+else:
+    st.error('Usuario no validado')
