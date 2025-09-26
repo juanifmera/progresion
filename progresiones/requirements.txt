@@ -3,3 +3,4 @@ streamlit_authenticator
 plotly
 chardet
 openpyxl
+xlsxwriter
