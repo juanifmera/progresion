@@ -64,9 +64,8 @@ if ventas_y_volumen and debitos and padron:
     if calculate:
         with st.spinner("🔄 Calculando progresiones y generando archivo Excel (Tiempo Estimado 1 min)"):
             excel_file = progresiones_mmaa(ventas_y_volumen, debitos, padron, mes)
+
             if excel_file is not None:
-                st.divider()
-                st.success(f'Archivo generado con exito. Porfavor descargarlo')
-                st.download_button("📥 Descargar Excel", data=excel_file, file_name=f"Progresiones MMAA - {mes}.xlsx", width='stretch', type='primary', mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button("📥 Descargar Excel", data=excel_file, file_name=f"Progresiones MMAA - {mes}.xlsx", width='stretch', mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
             else:
                 st.write(excel_file)
