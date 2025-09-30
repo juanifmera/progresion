@@ -640,13 +640,14 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
                 acumulado_venta_volumen_sector.to_excel(writer, sheet_name="Prog Acum Sector - SC", index=True)
                 acumulado_venta_volumen_seccion.to_excel(writer, sheet_name="Prog Acum Seccion - SC", index=True)
                 acumulado_venta_volumen_grupo_de_familia.to_excel(writer, sheet_name="Prog Acum GF - SC", index=True)
-                acumulado_venta_volumen_tienda_sector.to_excel(writer, sheet_name="Prog Acum TSect - SC", index=True)
-                acumulado_venta_volumen_tienda_seccion.to_excel(writer, sheet_name="Prog Acum TSecc - SC", index=True)
-                acumulado_venta_volumen_tienda_grupo_de_familia.to_excel(writer, sheet_name="Prog Acum TGf - SC", index=True)
-                acumulado_venta_volumen_total.to_excel(writer, sheet_name="Prog Aperturado x Tienda - SC", index=True)
+                acumulado_venta_volumen_tienda_sector.to_excel(writer, sheet_name="Prog Sector x Tienda - SC", index=True)
+                acumulado_venta_volumen_tienda_seccion.to_excel(writer, sheet_name="Prog Seccion x Tienda - SC", index=True)
+                acumulado_venta_volumen_tienda_grupo_de_familia.to_excel(writer, sheet_name="Prog GF x Tienda - SC", index=True)
+                #En caso de que el formato sea Express, no se genera la ultima tab para que no se rompa el programa
+                if df_join_sc['direccion'].unique()[0] != 'PROXIMIDAD':
+                    acumulado_venta_volumen_total.to_excel(writer, sheet_name="Prog Aperturado x Tienda - SC", index=True)
 
             output.seek(0)
-            print(f"Tamaño del archivo en memoria: {len(output.getvalue())} bytes")
             return output
 
         except Exception as e:

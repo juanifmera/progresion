@@ -1,7 +1,6 @@
 import streamlit as st
 from datetime import datetime
 from utils.utils import progresiones_acumulado, proteger_pagina
-
 st.set_page_config(layout='wide')
 proteger_pagina()
 
@@ -61,7 +60,7 @@ if ventas_y_volumen and debitos and padron:
     calculate = st.button('¡¡¡Calcular Progresiones Acumuladas!!!', type='primary', use_container_width=True)
 
     if calculate:
-        with st.spinner("🔄 Calculando progresiones y generando archivo Excel (Tiempo Estimado 15 Segundos)"):
+        with st.spinner("🔄 Calculando progresiones y generando archivo Excel (Tiempo Estimado 30 Segundos)"):
             excel_file = progresiones_acumulado(ventas_y_volumen, debitos, padron, mes)
 
             if isinstance(excel_file, str):
