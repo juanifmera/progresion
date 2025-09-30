@@ -60,7 +60,7 @@ if ventas_y_volumen and debitos and padron:
     calculate = st.button('¡¡¡Calcular Progresiones Acumuladas!!!', type='primary', use_container_width=True)
 
     if calculate:
-        with st.spinner("🔄 Calculando progresiones y generando archivo Excel (Tiempo Estimado 30 Segundos)"):
+        with st.spinner("🔄 Calculando progresiones y generando archivo Excel (Tiempo Estimado 1 min)"):
             excel_file = progresiones_acumulado(ventas_y_volumen, debitos, padron, mes)
 
             if isinstance(excel_file, str):
