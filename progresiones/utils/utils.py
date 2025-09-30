@@ -344,7 +344,7 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
 
         # Trabajo sobre Ventas y Volumen
         #Me quedo unicamente con las columnas importantes
-        df_ventas_y_volumen = df_ventas_y_volumen[['Año', 'Mes', 'Direccion', 'Punto Operacional', 'Sector', 'Seccion', 'Grupo de Familia', 'Ventas c/impuesto', 'Venta en Unidades']]
+        df_ventas_y_volumen = df_ventas_y_volumen[['Año', 'Mes', 'Direccion', 'Punto Operacional', 'Sector', 'Seccion', 'Grupo de Familia', 'Ventas c/impuesto', 'Venta en Unidades']].copy()
 
         #Renombro las columnas
         df_ventas_y_volumen.columns = (df_ventas_y_volumen.columns.str.strip().str.lower().str.replace(" ", "_"))
@@ -357,8 +357,8 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         df_ventas_y_volumen['numero_operacional'] = df_ventas_y_volumen['punto_operacional'].str.split('-').str[0]
 
         #Me quedo con las columnas necesarias
-        ventas = df_ventas_y_volumen[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'sector', 'seccion', 'grupo_de_familia', 'venta']]
-        volumen = df_ventas_y_volumen[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'sector', 'seccion', 'grupo_de_familia', 'volumen']]
+        ventas = df_ventas_y_volumen[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'sector', 'seccion', 'grupo_de_familia', 'venta']].copy()
+        volumen = df_ventas_y_volumen[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'sector', 'seccion', 'grupo_de_familia', 'volumen']].copy()
 
         #Quito los NA de las columans de valores
         ventas.dropna(subset=['venta'], how='any', inplace=True)
@@ -390,22 +390,23 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
 
         # Trabajo sobre Debitos
         # Renombro el DF
-        debitos_agrupados = df_debitos
+        debitos_agrupados = df_debitos.copy()
 
         # Renombro las columnas como corresponden
+        # Renombro la columna de Debitos a valores
         debitos_agrupados.columns = debitos_agrupados.columns.str.lower().str.replace(' ','_')
         debitos_agrupados.rename(columns={
         'cant._tickets_por_local':'valores'
         }, inplace=True)
 
-        # Renombro la columna de Debitos a valores
+        # Genero una columna Categorica
         debitos_agrupados['categoria'] = 'DEB'
 
-        # Genero una columna Categorica
+        # Genero columna para el ID tienda
         debitos_agrupados['numero_operacional'] = debitos_agrupados['punto_operacional'].str.split('-').str[0]
 
-        # Genero columna para el ID tienda
-        debitos_agrupados = debitos_agrupados[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria', 'valores']]
+        # Me quedo con las columnas que necesito
+        debitos_agrupados = debitos_agrupados[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria', 'valores']].copy()
 
         # Quito nulos numericos de la columna valores
         debitos_agrupados.dropna(subset=['valores'], how='any', inplace=True)
@@ -415,7 +416,7 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
 
         # Trabajo sobre el padron
         # Selecciono las columnas que me sirven del padron
-        padron = padron[['N°', 'NOMBRE', 'Fecha apertura', 'ORGANIZACIÓN ', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']] #type:ignore
+        padron = padron[['N°', 'NOMBRE', 'Fecha apertura', 'ORGANIZACIÓN ', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']].copy() #type:ignore
 
         # Cambio de nombres en el padron
         padron.columns = (
@@ -457,7 +458,7 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
 
         # Trabajo sobre Progresiones Total Formato
         # Me quedo unicamente con las columnas que me sirven del DF Joineado (ACA TENGO LA SC DEL MES)
-        df_join = df_join[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'fecha_apertura', 'fin_de_cierre', 'provincia','categoria', 'valores', mes_comparable[0:3].lower()]]
+        df_join = df_join[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'fecha_apertura', 'fin_de_cierre', 'provincia','categoria', 'valores', mes_comparable[0:3].lower()]].copy()
 
         #Renombro la Columna Mes a Fecha para Luego generar la Columna Mes Correspondiente
         df_join.rename(columns={
@@ -466,7 +467,7 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         df_join['mes'] = df_join['fecha'].str.split(' ').str[0]
 
         # Filtro unicamente las lineas que sean Superficie Comparable
-        df_join_sc = df_join[df_join[mes_comparable[0:3].lower()] == 'SC']
+        df_join_sc = df_join[df_join[mes_comparable[0:3].lower()] == 'SC'].copy()
 
         #Agrupo el df por categoria teniendo en cuenta el mes, ya que este me servirá luego para limitar el periodo comparable y la superficie comparable
         df_acum_formato = df_join_sc.groupby(['año', 'mes', 'direccion', 'categoria'])['valores'].sum().reset_index().pivot_table(values='valores', index=['mes', 'categoria'], columns='año', aggfunc='sum').reset_index()
@@ -498,7 +499,7 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         df_acum_provincia['aux'] = df_acum_provincia['mes'].map(orden_meses)
 
         #Limito el periodo del df al mes comparable que quiero
-        df_acum_provincia = df_acum_provincia.loc[df_acum_provincia['aux'] <= mes_limite]
+        df_acum_provincia = df_acum_provincia.loc[df_acum_provincia['aux'] <= mes_limite].copy()
 
         # Una vez que tengo el periodo, ya el mes no me sirve, por eso agrupo por provincia y categoria
         df_acum_provincia = df_acum_provincia.groupby(['categoria', 'provincia'])[[2024, 2025]].sum().reset_index()
@@ -516,7 +517,7 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         df_acum_tiendas['aux'] = df_acum_tiendas['mes'].map(orden_meses)
 
         #Limito el periodo del df al mes comparable que quiero
-        df_acum_tiendas = df_acum_tiendas.loc[df_acum_tiendas['aux'] <= mes_limite]
+        df_acum_tiendas = df_acum_tiendas.loc[df_acum_tiendas['aux'] <= mes_limite].copy()
 
         #Vuelvo a ordenar los meses
         df_acum_tiendas = df_acum_tiendas.sort_values('aux', ascending=True)
@@ -538,7 +539,7 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
 
         #Me quedo unicamente con las columnas que me sirven y los valores comparables
         acumulado_venta_volumen = acumulado_venta_volumen[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'sector', 'seccion', 'grupo_de_familia','fecha_apertura', 'fin_de_cierre', 'provincia', 'categoria', 'valores', mes_comparable[0:3].lower()]]
-        acumulado_venta_volumen = acumulado_venta_volumen[acumulado_venta_volumen[mes_comparable[0:3].lower()] == 'SC'] 
+        acumulado_venta_volumen = acumulado_venta_volumen[acumulado_venta_volumen[mes_comparable[0:3].lower()] == 'SC'].copy() 
 
         #Renomrbo la columna mes a fecha y genero la columna de mes correcta
         acumulado_venta_volumen.rename(columns={
@@ -550,7 +551,7 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         acumulado_venta_volumen['aux'] = acumulado_venta_volumen['mes'].map(orden_meses)
 
         #Limito el periodo del df al mes comparable que quiero
-        acumulado_venta_volumen = acumulado_venta_volumen.loc[acumulado_venta_volumen['aux'] <= mes_limite]
+        acumulado_venta_volumen = acumulado_venta_volumen.loc[acumulado_venta_volumen['aux'] <= mes_limite].copy()
 
         #Vuelvo a ordenar los meses
         acumulado_venta_volumen = acumulado_venta_volumen.sort_values('aux', ascending=True)
