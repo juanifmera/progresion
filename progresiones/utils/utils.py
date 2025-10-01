@@ -5,6 +5,16 @@ import plotly.express as px
 import io
 import chardet
 import streamlit as st
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler()]
+)
+
+logger = logging.getLogger(__name__)
+
 
 def proteger_pagina():
     if "authentication_status" not in st.session_state or st.session_state["authentication_status"] != True:
@@ -322,24 +332,31 @@ def exporto_parquet(df: pd.DataFrame):
 
 def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str): 
     try:
+        logger.info("🔁 Iniciando cálculo de progresiones acumuladas")
+
         try:
             ventas.seek(0)
             df_ventas_y_volumen = pd.read_csv(ventas, encoding='utf-16', header=1)
+            logger.debug(f"Ventas y Volumen cargado: {df_ventas_y_volumen.shape}")
         except Exception as e:
+            logger.error(f'Error leyendo archivo de ventas: {e}')
             return f'Error en ventas. {e}'
 
         try:
             debitos.seek(0)
             df_debitos = pd.read_csv(debitos, encoding='utf-16', header=1, sep=',', decimal=',')
+            logger.debug(f"Debitos cargado: {df_debitos.shape}")
         except Exception as e:
+            logger.error(f'Error leyendo archivo de debitos: {e}')
             return f'Error en debitos. {e}'
 
         try:
             padron.seek(0)
             df_padron = pd.read_excel(padron, header=17)
+            logger.debug(f"Padron cargado: {df_padron.shape}")
             padron = df_padron
-
         except Exception as e:
+            logger.error(f'Error leyendo archivo de padron: {e}')
             return f'Error en padron. {e}'
 
         # Trabajo sobre Ventas y Volumen
@@ -364,9 +381,13 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         ventas.dropna(subset=['venta'], how='any', inplace=True)
         volumen.dropna(subset=['volumen'], how='any', inplace=True)
 
+        logger.debug(f"Valores Nulos Quitados")
+
         #Realizo transformaciones para quitar carateres y convertir las columnas a valores numericos
         ventas['venta'] = ventas['venta'].str.replace('.','').str.replace(',','.').astype('float')
         volumen['volumen'] = volumen['volumen'].str.split(',').str[0].str.replace('.','').astype('int')
+
+        logger.debug(f"Valores transformados a numeros de forma exitosa")
 
         #Renombro las columnas con valores de ambos DF
         ventas.rename(columns={
@@ -381,16 +402,24 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         ventas['categoria'] = 'VCT'
         volumen['categoria'] = 'VOL'
 
+        logger.debug(f"columnas categorias generadas con exito")
+
         #Agrupo las ventas
         ventas_agrupado = ventas.groupby(['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria'])['valores'].sum().reset_index()
+
+        logger.debug(f"Primera agrupacion de ventas {ventas_agrupado.shape}")
 
         #Quito Envases del Volumen y Agrupo
         volumen_sin_vol = volumen[~volumen['grupo_de_familia'].str.contains('ENVASES')]
         volumen_agrupado = volumen_sin_vol.groupby(['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria'])['valores'].sum().reset_index()
 
+        logger.debug(f"Se quitaron los envases del volumen y se agrupo el df: {volumen_agrupado.shape}")
+
         # Trabajo sobre Debitos
         # Renombro el DF
         debitos_agrupados = df_debitos.copy()
+
+        logger.debug(f"debitos cargados {debitos_agrupados.shape}")
 
         # Renombro las columnas como corresponden
         # Renombro la columna de Debitos a valores
@@ -402,21 +431,31 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         # Genero una columna Categorica
         debitos_agrupados['categoria'] = 'DEB'
 
+        logger.debug(f"Columna categoria para debitos generada con exito")
+
         # Genero columna para el ID tienda
         debitos_agrupados['numero_operacional'] = debitos_agrupados['punto_operacional'].str.split('-').str[0]
 
         # Me quedo con las columnas que necesito
         debitos_agrupados = debitos_agrupados[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria', 'valores']].copy()
 
+        logger.debug(f"Agrupo los debitos {debitos_agrupados.shape}")
+
         # Quito nulos numericos de la columna valores
         debitos_agrupados.dropna(subset=['valores'], how='any', inplace=True)
 
+        logger.debug(f"Quito los nulos de los debitos")
+
         # Convierto la columna de valores a su tipo de datos correspondiente
         debitos_agrupados['valores'] = debitos_agrupados['valores'].str.replace('.','').astype(int)
+        
+        logger.debug(f"convierto la columan valores de debitos a numeros")
 
         # Trabajo sobre el padron
         # Selecciono las columnas que me sirven del padron
         padron = padron[['N°', 'NOMBRE', 'Fecha apertura', 'ORGANIZACIÓN ', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']].copy() #type:ignore
+
+        logger.debug(f"cargo el padron {padron.shape}")
 
         # Cambio de nombres en el padron
         padron.columns = (
@@ -450,15 +489,21 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         # Concateno todos los df (venta, debito y volumen) y lo joineo con el padron
         df = pd.concat([ventas_agrupado, volumen_agrupado, debitos_agrupados])
 
+        logger.debug(f"Concateno todos los df, ventas, debitos y vol {df.shape}")
+
         # Convierto el ID a numero
         df['numero_operacional'] = df['numero_operacional'].astype(int)
 
         # Genero el Join del df Agupado con el Padron con el objetivo de quedarme unicamente con aquellas tiendas Comparables
         df_join = df.merge(padron, how='left', on='numero_operacional')
 
+        logger.debug(f"Genero un Join con el padron {df_join.shape}")
+
         # Trabajo sobre Progresiones Total Formato
         # Me quedo unicamente con las columnas que me sirven del DF Joineado (ACA TENGO LA SC DEL MES)
         df_join = df_join[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'fecha_apertura', 'fin_de_cierre', 'provincia','categoria', 'valores', mes_comparable[0:3].lower()]].copy()
+
+        logger.debug(f"Join final con padrón: {df_join.shape}, columnas: {df_join.columns.tolist()}")
 
         #Renombro la Columna Mes a Fecha para Luego generar la Columna Mes Correspondiente
         df_join.rename(columns={
@@ -469,8 +514,13 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         # Filtro unicamente las lineas que sean Superficie Comparable
         df_join_sc = df_join[df_join[mes_comparable[0:3].lower()] == 'SC'].copy()
 
+        logger.debug(f"Me quedo unicamente con valores comparables {df_join_sc.shape}")
+
         #Agrupo el df por categoria teniendo en cuenta el mes, ya que este me servirá luego para limitar el periodo comparable y la superficie comparable
         df_acum_formato = df_join_sc.groupby(['año', 'mes', 'direccion', 'categoria'])['valores'].sum().reset_index().pivot_table(values='valores', index=['mes', 'categoria'], columns='año', aggfunc='sum').reset_index()
+
+        logger.info("🔄 Generando acumulado a nivel Formato")
+        logger.debug(f"Antes del pivot, DF: {df_join_sc.shape}")
 
         #Genero un diccionario con los meses y sus valores numericos de forma auxiliar
         orden_meses = {"Enero":1, "Febrero":2, "Marzo":3, "Abril":4, "Mayo":5, "Junio":6, "Julio":7, "Agosto":8, "Septiembre":9, "Octubre":10, "Noviembre":11, "Diciembre":12}
@@ -488,12 +538,19 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         #Una vez que tengo limitado el df por los meses que me interesan, agrupo el df para quitar el detalle de los meses ya que lo que queremos obtener es la sumatoria de los debitos, ventas y volumen del periodo acumulado indicado
         df_acum_formato = df_acum_formato.groupby(['categoria'])[[2024, 2025]].sum().reset_index()
 
+        logger.debug(f"Agrupo por año quitando el detalle de los meses: {df_acum_formato.shape}")
+
         #Calculo la Progresion
         df_acum_formato['progresion'] = round((((df_acum_formato[2025] / df_acum_formato[2024]) - 1) * 100), 1)
+
+        logger.debug(f"Calculo la primer progresion a nivel formato")
 
         ### Trabajo sobre las provincias
         #Agrupo el df por categoria teniendo en cuenta el mes, ya que este me servirá luego para limitar el periodo comparable y la superficie comparable
         df_acum_provincia = df_join_sc.groupby(['año', 'mes', 'direccion', 'provincia', 'categoria'])['valores'].sum().reset_index().pivot_table(values='valores', index=['mes', 'categoria', 'provincia'], columns='año', aggfunc='sum').reset_index()
+
+        logger.info("🔄 Generando acumulado a nivel Provincia")
+        logger.debug(f"Shape antes del pivot provincia: {df_acum_provincia.shape}")
 
         #Genero una columna auziliar para ordenar los meses y luego limitar el periodo
         df_acum_provincia['aux'] = df_acum_provincia['mes'].map(orden_meses)
@@ -510,8 +567,13 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         #Pivot para mostrar mejora la info
         df_acum_provincia = df_acum_provincia.pivot_table(values=[2024, 2025, 'progresion'], columns='categoria', index='provincia', aggfunc='sum').sort_values(('progresion', 'VOL'), ascending=False)
 
+        logger.debug(f"Trabajo sobre el df Provincia {df_acum_provincia.shape}")
+
         ### Trabajo sobre las tiendas
         df_acum_tiendas = df_join_sc.groupby(['año', 'mes', 'direccion', 'categoria', 'punto_operacional'])['valores'].sum().reset_index().pivot_table(values='valores', index=['mes', 'categoria', 'punto_operacional'], columns='año', aggfunc='sum').reset_index()
+
+        logger.info("🔄 Generando acumulado a nivel Tiendas")
+        logger.debug(f"Shape antes del pivot provincia: {df_acum_tiendas.shape}")
 
         #Genero una columna auziliar para ordenar los meses y luego limitar el periodo
         df_acum_tiendas['aux'] = df_acum_tiendas['mes'].map(orden_meses)
@@ -529,13 +591,20 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         df_acum_tiendas['progresion'] = round((((df_acum_tiendas[2025] / df_acum_tiendas[2024]) - 1) * 100), 1)
         df_acum_tiendas = df_acum_tiendas.pivot_table(values=[2024, 2025, 'progresion'], columns='categoria', index='punto_operacional', aggfunc='sum').sort_values(('progresion', 'VOL'), ascending=False)
 
+        logger.debug(f"Trabajo sobre las prog acum por tienda {df_acum_tiendas.shape}")
+
         ### Trabajo con VOL y VCT por Sector, Seccion y GF
         #Concateno las ventas con el volumen sin Envases con el objetivo de agruparlo por sus distintas carecteristicas y  asi conseguir las progresiones totales por Sector, seccion y grupo de familia
         acumulado_venta_volumen = pd.concat([ventas, volumen_sin_vol])
 
+        logger.info("🔄 Generando concat de VOL y VCT Solamente")
+        logger.debug(f"Shape antes del concat: {acumulado_venta_volumen.shape}")
+
         #Convierto la columna Numero Operacional para realizar el merge con el padron
         acumulado_venta_volumen['numero_operacional'] = acumulado_venta_volumen['numero_operacional'].astype(int) 
         acumulado_venta_volumen = acumulado_venta_volumen.merge(padron, how='left', on='numero_operacional')
+
+        logger.info("🔄 Generando Join de la venta y el vol con el padron")
 
         #Me quedo unicamente con las columnas que me sirven y los valores comparables
         acumulado_venta_volumen = acumulado_venta_volumen[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'sector', 'seccion', 'grupo_de_familia','fecha_apertura', 'fin_de_cierre', 'provincia', 'categoria', 'valores', mes_comparable[0:3].lower()]]
@@ -556,14 +625,20 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         #Vuelvo a ordenar los meses
         acumulado_venta_volumen = acumulado_venta_volumen.sort_values('aux', ascending=True)
 
-        #Agrupo por y trabajo por Sector
+        #Agrupo y trabajo por Sector
         acumulado_venta_volumen_sector = acumulado_venta_volumen.groupby(['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'sector', 'categoria'])['valores'].sum().reset_index()
+
+        logger.info("🔄 Agrupo por Sector Ventas y VOL")
 
         #Pivoteo la Info para generar las Progresiones
         acumulado_venta_volumen_sector = acumulado_venta_volumen_sector.groupby(['año', 'mes', 'direccion', 'sector', 'categoria'])['valores'].sum().reset_index().pivot_table(values='valores', index=['sector', 'categoria'], columns='año', aggfunc='sum').reset_index()
 
+        logger.info("🔄 Pivot VOL Y VCT por Sector")
+
         #Genero la Progresion
         acumulado_venta_volumen_sector['progresion'] = round(((acumulado_venta_volumen_sector[2025] / acumulado_venta_volumen_sector[2024])-1)*100,1)
+
+        logger.info("🔄 Genero Progresiones")
 
         #Pivoteo la Informacion para disponibilizar la informacion en formato wide y no long
         acumulado_venta_volumen_sector = acumulado_venta_volumen_sector.pivot_table(values=[2024, 2025, 'progresion'], index='sector', columns='categoria', aggfunc='sum').sort_values(by=('progresion', 'VOL'), ascending=False)
@@ -580,6 +655,8 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         #Pivoteo la Informacion para disponibilizar la informacion en formato wide y no long
         acumulado_venta_volumen_seccion = acumulado_venta_volumen_seccion.pivot_table(values=[2024, 2025, 'progresion'], index='seccion', columns='categoria', aggfunc='sum').sort_values(by=('progresion', 'VOL'), ascending=False)
 
+        logger.info("🔄 Finalizo las secciones")
+
         ### Agrupo y trabajo por grupo de familia
         acumulado_venta_volumen_grupo_de_familia = acumulado_venta_volumen.groupby(['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'grupo_de_familia', 'categoria'])['valores'].sum().reset_index()
 
@@ -591,6 +668,8 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
 
         #Pivoteo la Informacion para disponibilizar la informacion en formato wide y no long
         acumulado_venta_volumen_grupo_de_familia = acumulado_venta_volumen_grupo_de_familia.pivot_table(values=[2024, 2025, 'progresion'], index='grupo_de_familia', columns='categoria', aggfunc='sum').sort_values(by=('progresion', 'VOL'), ascending=False)
+
+        logger.info("🔄 Finalizo los Grupos de Familia")
 
         #Agrupo y trabajo por Tienda / Sector
         acumulado_venta_volumen_tienda_sector = acumulado_venta_volumen.groupby(['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'sector', 'categoria'])['valores'].sum().reset_index()
@@ -604,6 +683,8 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         #Pivoteo la Informacion para disponibilizar la informacion en formato wide y no long
         acumulado_venta_volumen_tienda_sector = acumulado_venta_volumen_tienda_sector.pivot_table(values=[2024, 2025, 'progresion'], index=['punto_operacional', 'sector'], columns='categoria', aggfunc='sum').sort_values(by=('progresion', 'VOL'), ascending=False).reset_index()
 
+        logger.info("🔄 Finalizo los sectores por Tienda")
+
         #Agrupo y trabajo por Tienda / Seccion
         acumulado_venta_volumen_tienda_seccion = acumulado_venta_volumen.groupby(['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'seccion', 'categoria'])['valores'].sum().reset_index()
 
@@ -615,6 +696,8 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
 
         #Pivoteo la Informacion para disponibilizar la informacion en formato wide y no long
         acumulado_venta_volumen_tienda_seccion = acumulado_venta_volumen_tienda_seccion.pivot_table(values=[2024, 2025, 'progresion'], index=['punto_operacional', 'seccion'], columns='categoria', aggfunc='sum').sort_values(by=('progresion', 'VOL'), ascending=False).reset_index()
+
+        logger.info("🔄 Finalizo las secciones por Tienda")
 
         #Agrupo y trabajo por Tienda / GF
         acumulado_venta_volumen_tienda_grupo_de_familia = acumulado_venta_volumen.groupby(['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'grupo_de_familia', 'categoria'])['valores'].sum().reset_index()
@@ -628,12 +711,18 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         #Pivoteo la Informacion para disponibilizar la informacion en formato wide y no long
         acumulado_venta_volumen_tienda_grupo_de_familia = acumulado_venta_volumen_tienda_grupo_de_familia.pivot_table(values=[2024, 2025, 'progresion'], index=['punto_operacional', 'grupo_de_familia'], columns='categoria', aggfunc='sum').sort_values(by=('progresion', 'VOL'), ascending=False).reset_index()
 
+        logger.info("🔄 Finalizo los Grupos de Familia por Tienda")
+
         #Aperturo para dejar toda la informacion lista para que el usuario realice una tabla Pivot y tenga todo de forma  compacta
-        acumulado_venta_volumen_total = acumulado_venta_volumen.groupby(['año', 'mes', 'direccion', 'punto_operacional', 'sector', 'seccion', 'grupo_de_familia', 'categoria'])['valores'].sum().reset_index()
+        if df_join_sc['direccion'].unique()[0] != 'PROXIMIDAD':
+            acumulado_venta_volumen_total = acumulado_venta_volumen.groupby(['año', 'mes', 'direccion', 'punto_operacional', 'sector', 'seccion', 'grupo_de_familia', 'categoria'])['valores'].sum().reset_index()
+
+        logger.debug(f"Uso de memoria previo al ExcelWriter: {round(df.memory_usage(deep=True).sum() / 1024 ** 2, 2)} MB")
 
         try:
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                logger.info("💾 Comenzando a escribir Excel en memoria")
                 df_acum_formato.to_excel(writer, sheet_name=f"Prog Acum {df_join_sc['direccion'].unique()[0]} - SC", index=True)
                 df_acum_provincia.to_excel(writer, sheet_name="Prog Acum Provincia - SC", index=True)
                 df_acum_tiendas.to_excel(writer, sheet_name="Prog Acum Tiendas - SC", index=True)
@@ -648,6 +737,7 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
                     acumulado_venta_volumen_total.to_excel(writer, sheet_name="Prog Aperturado x Tienda - SC", index=True)
 
             output.seek(0)
+            logger.info("✅ Excel generado correctamente")
             return output
 
         except Exception as e:
