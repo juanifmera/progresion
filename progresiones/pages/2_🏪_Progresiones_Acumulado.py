@@ -1,6 +1,6 @@
 import streamlit as st
 from datetime import datetime
-from utils.utils import progresiones_acumulado, proteger_pagina
+from utils.utils import progresiones_acumulado, proteger_pagina, progresiones_acumulado_csv
 st.set_page_config(layout='wide')
 proteger_pagina()
 
@@ -50,16 +50,21 @@ st.markdown('Una vez que esten subidos los tres archivo, debajo aparecerá una l
 
 if ventas_y_volumen and debitos and padron:
 
+    col1, col2 = st.columns([2,1])
     # datetime.today().month devuelve 1-12, por eso restamos 1 para el índice
     meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
     mes_actual = meses[datetime.today().month - 2]
 
-    mes = st.selectbox('Elegir un mes para realizar la comparabilidad de calculos para las progresiones y seleccionar el periodo acumulado deseado.', meses, index=datetime.today().month - 2, placeholder=mes_actual)
+    with col1:
+        mes = st.selectbox('Elegir un mes para realizar la comparabilidad de calculos para las progresiones y seleccionar el periodo acumulado deseado.', meses, index=datetime.today().month - 2, placeholder=mes_actual)
+
+    with col2:
+        formato = st.segmented_control('Formato de Descarga', help='Se recomienda utilizar csv para Express', options=['XLSX', 'CSV'], width='stretch', default='XLSX')
 
     calculate = st.button('¡¡¡Calcular Progresiones Acumuladas!!!', type='primary', use_container_width=True)
 
-    if calculate:
+    if calculate and formato == 'XLSX':
         with st.spinner("🔄 Calculando progresiones y generando archivo Excel (Tiempo Estimado 1 min)"):
             excel_file = progresiones_acumulado(ventas_y_volumen, debitos, padron, mes)
 
@@ -72,4 +77,19 @@ if ventas_y_volumen and debitos and padron:
                     data=excel_file,
                     file_name=f"Progresiones Acumulado - {mes}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True
+    )
+    
+    elif calculate and formato == 'CSV':
+        with st.spinner("🔄 Calculando progresiones y generando archivo CSV (Tiempo Estimado 1 min)"):
+            csv_file = progresiones_acumulado_csv(ventas_y_volumen, debitos, padron, mes)
+
+            if isinstance(csv_file, str):
+                st.error(csv_file)
+
+            elif csv_file:
+                st.download_button(
+                    "📥 Descargar csv",
+                    data=csv_file,
+                    file_name=f"Progresiones Acumulado - {mes}.zip",
+                    mime="application/zip", use_container_width=True
     )
