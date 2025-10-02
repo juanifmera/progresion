@@ -1,6 +1,6 @@
 import streamlit as st
 from datetime import datetime
-from utils.utils import proteger_pagina
+from utils.utils import proteger_pagina, obtener_join_comparable, obtener_join_no_comparable
 st.set_page_config(layout='wide')
 
 proteger_pagina()
