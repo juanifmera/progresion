@@ -1102,6 +1102,8 @@ def obtener_join_comparable(ventas, debitos, padron, mes_comparable:str):
         }, inplace=True)
         df_join['mes'] = df_join['fecha'].str.split(' ').str[0]
 
+        df_join = df_join[['año', 'fecha', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'fecha_apertura', 'fin_de_cierre', 'provincia','categoria', 'valores', mes_comparable[0:3].lower()]].copy()
+
         df_join_sc = df_join[df_join[mes_comparable[0:3].lower()] == 'SC'].copy()
 
         try:
@@ -1248,6 +1250,8 @@ def obtener_join_no_comparable(ventas, debitos, padron, mes_comparable:str):
         }, inplace=True)
         df_join['mes'] = df_join['fecha'].str.split(' ').str[0]
 
+        df_join = df_join[['año', 'fecha', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'fecha_apertura', 'fin_de_cierre', 'provincia','categoria', 'valores', mes_comparable[0:3].lower()]].copy()
+
         try:
             output = io.BytesIO()
             df_join.to_csv(output, index=False, encoding="utf-16", decimal=',')
@@ -1258,11 +1262,7 @@ def obtener_join_no_comparable(ventas, debitos, padron, mes_comparable:str):
         except Exception as e:
             print(e)
             return None
-
-        except Exception as e:
-            print(e)
-            return None
-
+        
     except Exception as e:
         return f'Hubo un error en el medio del flujo/pipeline. Detalle del error: {e}'
     
