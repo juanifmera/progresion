@@ -295,6 +295,11 @@ def progresiones_mmaa(volumen_y_ventas, debitos, padron, mes_comparable:str):
 
         df_tienda_grupo_de_familia = df_tienda_grupo_de_familia.pivot_table(values=[2024, 2025, 'progresion'], columns='categoria', index=['direccion', 'punto_operacional', 'grupo_de_familia'], aggfunc='sum').reset_index().sort_values(by=[('direccion',''), ('punto_operacional',    ''), ('grupo_de_familia',    ''), ('progresion', 'VOL')], ascending=[False, False, False, False]) #type:ignore
 
+        # Trabajo sobre las provincias, pero aperturado por direccion
+        df_progresiones_provincia_abierto = df_join_sc.groupby(['año', 'provincia', 'direccion', 'categoria'])['valores'].sum().reset_index().pivot_table(values='valores', index=['provincia', 'direccion', 'categoria'], columns=['año'], aggfunc='sum').reset_index()
+        df_progresiones_provincia_abierto['progresion'] = ((df_progresiones_provincia_abierto[2025] / df_progresiones_provincia_abierto[2024] - 1) * 100).round(2)
+        df_progresiones_provincia_abierto = df_progresiones_provincia_abierto.pivot_table(values=[2024, 2025, 'progresion'], index=['direccion', 'provincia'], columns=['categoria'], aggfunc='sum').fillna(0).reset_index()
+
         try:
             # Exporto todas las tablas a un archivo Excel en memoria
             output = io.BytesIO()
@@ -302,6 +307,7 @@ def progresiones_mmaa(volumen_y_ventas, debitos, padron, mes_comparable:str):
                 df_progresiones_total_carrefour.to_excel(writer, sheet_name="Prog Carrefour - SC", index=False)
                 df_progresiones_formato.to_excel(writer, sheet_name="Prog x Formatos - SC", index=True)
                 df_progresiones_provincia.to_excel(writer, sheet_name="Prog x Provincia - SC", index=True)
+                df_progresiones_provincia_abierto.to_excel(writer, sheet_name='Prog x Prov y Form - SC', index=True)
                 df_progresiones_tiendas.to_excel(writer, sheet_name="Prog x Tiendas - SC", index=True)
                 progresion_sectores_total.to_excel(writer, sheet_name='Progresiones x Sector - SC', index=True)
                 progresion_seccion_total.to_excel(writer, sheet_name='Progresiones x Seccion - SC', index=True)

@@ -59,13 +59,13 @@ if ventas_y_volumen and debitos and padron:
 
     mes = st.selectbox('Elegir un mes para realizar la comparabilidad de calculos para las progresiones.', meses, index=datetime.today().month - 2, placeholder=mes_actual)
 
-    calculate = st.button('¡¡¡Calcular Progresiones MMAA!!!', type='primary', width='stretch')
+    calculate = st.button('¡¡¡Calcular Progresiones MMAA!!!', type='primary', use_container_width=True)
 
     if calculate:
         with st.spinner("🔄 Calculando progresiones y generando archivo Excel (Tiempo Estimado 1 min)"):
             excel_file = progresiones_mmaa(ventas_y_volumen, debitos, padron, mes)
 
             if excel_file is not None:
-                st.download_button("📥 Descargar Excel", data=excel_file, file_name=f"Progresiones MMAA - {mes}.xlsx", width='stretch', mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button("📥 Descargar Excel", data=excel_file, file_name=f"Progresiones MMAA - {mes}.xlsx", use_container_width=True,  mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
             else:
                 st.write(excel_file)
