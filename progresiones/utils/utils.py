@@ -521,13 +521,8 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         # Filtro unicamente las lineas que sean Superficie Comparable
         df_join_sc = df_join[df_join[mes_comparable[0:3].lower()] == 'SC'].copy()
 
-        logger.debug(f"Me quedo unicamente con valores comparables {df_join_sc.shape}")
-
         #Agrupo el df por categoria teniendo en cuenta el mes, ya que este me servirá luego para limitar el periodo comparable y la superficie comparable
-        df_acum_formato = df_join_sc.groupby(['año', 'mes', 'direccion', 'categoria'])['valores'].sum().reset_index().pivot_table(values='valores', index=['mes', 'categoria'], columns='año', aggfunc='sum').reset_index()
-
-        logger.info("🔄 Generando acumulado a nivel Formato")
-        logger.debug(f"Antes del pivot, DF: {df_join_sc.shape}")
+        df_acum_formato = df_join_sc.groupby(['año', 'mes', 'direccion', 'categoria'])['valores'].sum().reset_index().pivot_table(values='valores', index=['mes', 'direccion', 'categoria'], columns='año', aggfunc='sum').reset_index()
 
         #Genero un diccionario con los meses y sus valores numericos de forma auxiliar
         orden_meses = {"Enero":1, "Febrero":2, "Marzo":3, "Abril":4, "Mayo":5, "Junio":6, "Julio":7, "Agosto":8, "Septiembre":9, "Octubre":10, "Noviembre":11, "Diciembre":12}
@@ -542,15 +537,18 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         #Vuelvo a ordenar los meses
         df_acum_formato = df_acum_formato.sort_values('aux', ascending=True)
 
-        #Una vez que tengo limitado el df por los meses que me interesan, agrupo el df para quitar el detalle de los meses ya que lo que queremos obtener es la sumatoria de los debitos, ventas y volumen del periodo acumulado indicado
-        df_acum_formato = df_acum_formato.groupby(['categoria'])[[2024, 2025]].sum().reset_index()
+        # TOTAL CIA
+        df_total_cia = df_join_sc.groupby(['año', 'mes', 'categoria'])['valores'].sum().reset_index().pivot_table(values='valores', index=['mes', 'categoria'], columns='año', aggfunc='sum').reset_index().groupby('categoria')[[2024, 2025]].sum()
+        df_total_cia['progresion'] = round((((df_total_cia[2025] / df_total_cia[2024]) - 1) * 100), 1)
 
-        logger.debug(f"Agrupo por año quitando el detalle de los meses: {df_acum_formato.shape}")
+        #Una vez que tengo limitado el df por los meses que me interesan, agrupo el df para quitar el detalle de los meses ya que lo que queremos obtener es la sumatoria de los debitos, ventas y volumen del periodo acumulado indicado
+        df_acum_formato = df_acum_formato.groupby(['direccion', 'categoria'])[[2024, 2025]].sum().reset_index()
 
         #Calculo la Progresion
         df_acum_formato['progresion'] = round((((df_acum_formato[2025] / df_acum_formato[2024]) - 1) * 100), 1)
 
-        logger.debug(f"Calculo la primer progresion a nivel formato")
+        #Pivoteo para mostrar mejor la informacion
+        df_acum_formato.pivot_table(values=[2024, 2025, 'progresion'], index='direccion', columns='categoria')
 
         ### Trabajo sobre las provincias
         #Agrupo el df por categoria teniendo en cuenta el mes, ya que este me servirá luego para limitar el periodo comparable y la superficie comparable
@@ -721,8 +719,14 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         logger.info("🔄 Finalizo los Grupos de Familia por Tienda")
 
         #Aperturo para dejar toda la informacion lista para que el usuario realice una tabla Pivot y tenga todo de forma  compacta
-        if df_join_sc['direccion'].unique()[0] != 'PROXIMIDAD':
-            acumulado_venta_volumen_total = acumulado_venta_volumen.groupby(['año', 'mes', 'direccion', 'punto_operacional', 'sector', 'seccion', 'grupo_de_familia', 'categoria'])['valores'].sum().reset_index()
+        #if len(df_join_sc['direccion'].isin(['PROXIMIDAD']).unique()) >= 2:
+            #acumulado_venta_volumen_total = acumulado_venta_volumen.groupby(['año', 'mes', 'direccion', 'punto_operacional', 'sector', 'seccion', 'grupo_de_familia', 'categoria'])['valores'].sum().reset_index()
+
+        # Trabajo sobre las provincias, pero aperturado por direccion
+        df_progresiones_provincia_abierto = df_join_sc.groupby(['año', 'provincia', 'direccion', 'categoria'])['valores'].sum().reset_index().pivot_table(values='valores', index=['provincia', 'direccion', 'categoria'], columns=['año'], aggfunc='sum').reset_index()
+        df_progresiones_provincia_abierto['progresion'] = ((df_progresiones_provincia_abierto[2025] / df_progresiones_provincia_abierto[2024] - 1) * 100).round(2)
+        df_progresiones_provincia_abierto = df_progresiones_provincia_abierto.pivot_table(values=[2024, 2025, 'progresion'], index=['direccion', 'provincia'], columns=['categoria'], aggfunc='sum').fillna(0).reset_index()
+
 
         logger.debug(f"Uso de memoria previo al ExcelWriter: {round(df.memory_usage(deep=True).sum() / 1024 ** 2, 2)} MB")
 
@@ -730,8 +734,11 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine="openpyxl") as writer:
                 logger.info("💾 Comenzando a escribir Excel en memoria")
-                df_acum_formato.to_excel(writer, sheet_name=f"Prog Acum {df_join_sc['direccion'].unique()[0]} - SC", index=True)
+                
+                df_total_cia.to_excel(writer, sheet_name=f"Prog Acum Carrefour - SC", index=False)
+                df_acum_formato.to_excel(writer, sheet_name=f"Prog Acum Formatos - SC", index=False)
                 df_acum_provincia.to_excel(writer, sheet_name="Prog Acum Provincia - SC", index=True)
+                df_progresiones_provincia_abierto.to_excel(writer, sheet_name="Prog Acum Prov Abierto - SC", index=True)
                 df_acum_tiendas.to_excel(writer, sheet_name="Prog Acum Tiendas - SC", index=True)
                 acumulado_venta_volumen_sector.to_excel(writer, sheet_name="Prog Acum Sector - SC", index=True)
                 acumulado_venta_volumen_seccion.to_excel(writer, sheet_name="Prog Acum Seccion - SC", index=True)
@@ -740,8 +747,8 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
                 acumulado_venta_volumen_tienda_seccion.to_excel(writer, sheet_name="Prog Seccion x Tienda - SC", index=True)
                 acumulado_venta_volumen_tienda_grupo_de_familia.to_excel(writer, sheet_name="Prog GF x Tienda - SC", index=True)
                 #En caso de que el formato sea Express, no se genera la ultima tab para que no se rompa el programa
-                if df_join_sc['direccion'].unique()[0] != 'PROXIMIDAD':
-                    acumulado_venta_volumen_total.to_excel(writer, sheet_name="Prog Aperturado x Tienda - SC", index=True)
+                #if len(df_join_sc['direccion'].isin(['PROXIMIDAD']).unique()) >= 2:
+                    #acumulado_venta_volumen_total.to_excel(writer, sheet_name="Prog Aperturado x Tienda - SC", index=True)
 
             output.seek(0)
             logger.info("✅ Excel generado correctamente")
