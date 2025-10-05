@@ -7,7 +7,7 @@ proteger_pagina()
 
 st.title('Debitos, Venta con Tasa y Volumen (sin envases) consolidado con un join con el padron')
 st.divider()
-st.markdown('Utiliza esta herramienta para poder obtener obtener la informacion de los Debitos, Venta con tasa y Volumen (sin envases), consolidada en un solo archivo por Tienda')
+st.markdown('Utiliza esta herramienta para poder obtener obtener la informacion de los Debitos, Venta con tasa y Volumen (sin envases), consolidada en un solo archivo por Tienda. Deberas colocar los reportes descargados desde MicroStrategy aperturando el reporte de Ventas y Volumen por Sector, Seccion y Grupo de Familia, ya que de esta forma se quitaran los envases del Volumen.')
 
 st.subheader('Primeros Pasos', divider='rainbow')
 

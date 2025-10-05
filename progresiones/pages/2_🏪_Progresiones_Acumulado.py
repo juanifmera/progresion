@@ -6,7 +6,7 @@ proteger_pagina()
 
 st.title('Calcular Progresiones del periodo Acumulado Seleccionado contra mismo Periodo del año pasado')
 st.divider()
-st.markdown('Utiliza esta herramienta para poder obtener las progresiones del periodo acumulado de una Direccion (Formato) en especifico a nivel Formato, Provincia, Tienda, Sector, Seccion y Grupo de Familia')
+st.markdown('Utiliza esta herramienta para poder obtener las progresiones del periodo acumulado de una Direccion (Formato) en especifico a nivel Formato, Provincia, Tienda, Sector, Seccion y Grupo de Familia. Deberas colocar los reportes descargados desde MicroStrategy aperturando el reporte de Ventas y Volumen por Sector, Seccion y Grupo de Familia, ya que de esta forma se quitaran los envases del Volumen')
 
 st.subheader('Primeros Pasos', divider='rainbow')
 

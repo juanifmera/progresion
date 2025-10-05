@@ -21,7 +21,7 @@ def get_df_final(ventas, debitos, padron, mes_comparable: str):
 
 st.title('Comparativa de Progresiones vs Formato')
 st.divider()
-st.markdown('Utiliza esta herramienta para poder comparar las progresiones de una o varias tiendas contra su formato. De esta forma podras visualizar si una tienda performa mejor o peor que el formato en general')
+st.markdown('Utiliza esta herramienta para poder comparar las progresiones de una o varias tiendas contra su formato. De esta forma podras visualizar si una tienda performa mejor o peor que el formato en general. Deberas colocar los reportes descargados desde MicroStrategy aperturando el reporte de Ventas y Volumen por Grupo de Familia, ya que de esta forma se quitaran los envases del Volumen.')
 
 st.subheader('Primeros Pasos: Carga de Informacion', divider='rainbow')
 
