@@ -16,7 +16,6 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-
 def proteger_pagina():
     if "authentication_status" not in st.session_state or st.session_state["authentication_status"] != True:
         st.warning("🔐 Debés iniciar sesión para acceder a esta página.")
