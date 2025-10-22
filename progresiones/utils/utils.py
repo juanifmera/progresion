@@ -2005,10 +2005,16 @@ def briefing(ventas_y_volumen_por_tienda, debitos_por_tienda, padron, debitos_po
         df_formato_comparable_aux = df_formato_comparable_aux[['direccion', 'numero_operacional', 'punto_operacional', 'categoria', 'sector', 2024, 2025, 'progresion']]
         df_formato_comparable_aux['aux'] = 'formato'
 
-        df_formato_sector_comparable_aux['aux'] = 'sector'
+        df_formato_sector_comparable_2_aux = df_formato_sector_comparable_aux.groupby(['direccion', 'categoria', 'sector'])[[2024, 2025]].sum().reset_index()
+        df_formato_sector_comparable_2_aux['progresion'] = round(df_formato_sector_comparable_2_aux[2025] / df_formato_sector_comparable_2_aux[2024] - 1, 3)
+        df_formato_sector_comparable_2_aux['aux'] = 'formato_sector'
+        df_formato_sector_comparable_2_aux['numero_operacional'] = ''
+        df_formato_sector_comparable_2_aux['punto_operacional'] = ''
 
-        df_bajada_consolidada = pd.concat([df_tienda_comparable_aux, df_formato_comparable_aux, df_formato_sector_comparable_aux])
+        df_formato_sector_comparable_aux['aux'] = 'tienda_sector'
 
+        df_bajada_consolidada = pd.concat([df_tienda_comparable_aux, df_formato_comparable_aux, df_formato_sector_comparable_aux, df_formato_sector_comparable_2_aux])
+        
         # Finalmente comienzo a trabajar sobre las progresiones historicas de los formatos con el objetivo de Construir facilmente los graficos que se muestran en los Briefings
         # Cargo toda la Info
         try:
