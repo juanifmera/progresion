@@ -7,6 +7,7 @@ import chardet
 import streamlit as st
 import logging
 import zipfile
+import numpy as np
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -1697,3 +1698,466 @@ def progresiones_acumulado_csv(ventas, debitos, padron, mes_comparable:str):
 
     except Exception as e:
         return f'Error a la hora de generar calculos. Error: {e}'
+    
+def briefing(ventas_y_volumen_por_tienda, debitos_por_tienda, padron, debitos_por_sector, historico_ventas, historico_volumen, historico_debitos, mes_comparable:str):
+    
+    '''
+    Funcion para generar archivos para realizar el briefing semanal de Hiper y Maxi. Proximamente de Market y Express tambien. Para utilizar esta funcion se debera descargar desde Microstrategy los siguientes reportes con los filtros correspondientes:
+
+    1- Ventas y Volumen (28 dias Moviles) --> Filtros: Año, Mes, Direccion, Punto Operacional, Sector, Seccion, Grupo de Familia, PGC, PFT, BAZAR, ELECTRO, TXTIL, OTROS, INCSA, MAXI, 5 MINUTOS, E-COMERCE. IMPORTANTE --> Seleccionar el rango de fechas 28 dias moviles que se requiera y exportar en formato CSV.
+
+    2- Debitos (28 dias Moviles) --> Filtros: Año, Mes, Direccion, Punto Operacional, INCSA, MAXI, 5 MINUTOS, E-COMERCE. IMPORTANTE --> Seleccionar el rango de fechas 28 dias moviles que se requiera y exportar en formato CSV.
+
+    3- Padron --> El padron mas actualizado a la fecha en formato XLSX.
+
+    4- Debitos por Sector (28 dias Moviles) --> Filtros: Año, Mes, Direccion, Punto Operacional, Sector, PGC, PFT, BAZAR, ELECTRO, TXTIL, OTROS, INCSA, MAXI, 5 MINUTOS, E-COMERCE. IMPORTANTE --> Seleccionar el rango de fechas 28 dias moviles que se requiera y exportar en formato CSV.
+
+    -CON ESTOS 4 Reportes ya podriamos calcular todas las progresiones necesarias para las tablas de los reportes. Lo unico que faltaria, es obtener las progresiones historicas para los graficos. Para eso, deberemos descargar 3 reportes adicionales:
+
+    5- Historico Ventas --> Filtros: Año, Mes, Direccion, Punto Operacional, Grupo de Familia, PGC, PFT, BAZAR, ELECTRO, TXTIL, OTROS, INCSA, MAXI, 5 MINUTOS, E-COMERCE, 2023, 2024, 2025. Exportar en formato CSV.
+
+    6- Historico Debitos --> Año, Mes, Punto Operacional, Direccion, INCSA, MAXI, 5 MINUTOS, E-COMERCE, 2023, 2024, 2025. Exportar en formato CSV.
+
+    7- Historico Volumen sin Envase por Tienda (Reporte que Genero David) --> Año, Mes, Punto Operacional, Direccion, (Estructura comercial dejar como esta), INCSA, MAXI, 5 MINUTOS, E-COMERCE, 2023, 2024, 2025. Exportar en formato CSV.
+
+    8- Mes Comparable --> Mes elegido para realizar el calculo de la comparabilidad por Superficie.
+
+    '''
+    try:
+        # Seleccionoco las columnas con las que voy a trabajar del reporte de ventas y volumen para optimizar la carga de datos
+        cols = ['Año', 'Mes', 'Direccion', 'Punto Operacional', 'Sector', 'Seccion', 'Grupo de Familia', 'Ventas c/impuesto', 'Venta en Unidades']
+        # Leo el df de ventas y volumen
+        try:
+            df_ventas_vol = pd.read_csv(ventas_y_volumen_por_tienda, encoding='utf-16', header=1, usecols=cols, decimal=',')
+
+        except Exception as e:
+            return f'Error a la hora de cargar las Ventas y el Volumen. ERROR: {e}'
+        
+        # Estandarizo el nombre de las columnas
+        df_ventas_vol.columns = df_ventas_vol.columns.str.lower().str.replace(' ','_')
+
+        # Renombro columnas para que tenga mas sentido
+        df_ventas_vol = df_ventas_vol.rename(columns=
+            {
+                'mes':'fecha',
+                'ventas_c/impuesto':'vct',
+                'venta_en_unidades':'vol'
+            }
+        )
+
+        # Genero una columna para obtener el valor del MES solo
+        df_ventas_vol['mes'] = df_ventas_vol['fecha'].str.split(' ').str[0]
+
+        # Genero una columna para obtener el NUMERO operacional de la tienda y lo convierto a numero
+        df_ventas_vol['numero_operacional'] = df_ventas_vol['punto_operacional'].str.split(' ').str[0].astype(int)
+
+        # Divido el df de Ventas y Volumen en uno solo de Ventas, y otro solo de Volumen!
+        df_ventas = df_ventas_vol[['año', 'fecha', 'direccion', 'punto_operacional', 'sector', 'seccion', 'grupo_de_familia', 'vct', 'mes', 'numero_operacional']]
+        df_volumen = df_ventas_vol[['año', 'fecha', 'direccion', 'punto_operacional', 'sector', 'seccion', 'grupo_de_familia', 'vol', 'mes', 'numero_operacional']]
+
+        # Renombro la columna donde se encuentran los valores a "valores". Esto me servirá luego para realizar un concat
+        df_ventas = df_ventas.rename(columns={'vct':'valores'})
+        df_volumen = df_volumen.rename(columns={'vol':'valores'})
+
+        # Genero una columna categorica para distinguir cuales son los valores de las ventas , y cuales son los valores del volumen
+        df_ventas['categoria'] = 'vct'
+        df_volumen['categoria'] = 'vol'
+
+        # Genero una transformacion en la columna valores para obtener un dtype correspondiente, ya que al leer los archivos, la columna valores queda como un string y no detecta de forma correcta los puntos y las comas
+        df_ventas['valores'] = pd.to_numeric(df_ventas['valores'].str.replace('.', '').str.replace(',','.'))
+        df_volumen['valores'] = pd.to_numeric(df_volumen['valores'].str.replace('.', '').str.replace(',','.'))
+
+        # Le quito los envases al volumen
+        df_volumen = df_volumen[~df_volumen['grupo_de_familia'].isin(['ENVASES BEBIDAS', 'ENVASES PAGADOS'])]
+
+        # Una vez que ambos df estan limpios y ordenados, los agrupo para elevar su jerarquia hasta la tienda, ya que el sector, seccion y grupo de familia no son necesarios para calular las progresiones POR TIENDA
+        df_ventas_tienda = df_ventas.groupby(['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria'])['valores'].sum().reset_index()
+        df_volumen_tienda = df_volumen.groupby(['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria'])['valores'].sum().reset_index()
+
+        # Cargo y trabajo sobre el PADRON
+        # Cargo unicamente las columnas que me van a servir
+        cols = ['N°', 'NOMBRE', 'Fecha apertura', 'BANDERA', 'ORGANIZACIÓN ', 'PROVINCIA', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']
+
+        # Leo el Padron
+        try:
+            padron = pd.read_excel(padron, header=17, usecols=cols)
+        except Exception as e:
+            return f'Error a la hora de cargar el Padron. ERROR: {e}'
+        
+        # Estandarizo los nombres de las columnas del padron
+        padron.columns = padron.columns.str.lower().str.strip().str.replace(' ', '_').str.replace('.2', '')
+
+        meses_dict = {
+        'enero': 'ene',
+        'febrero': 'feb',
+        'marzo': 'mar',
+        'abril': 'abr',
+        'mayo': 'may',
+        'junio': 'jun',
+        'julio': 'jul',
+        'agosto': 'ago',
+        'septiembre': 'sep',
+        'octubre': 'oct',
+        'noviembre': 'nov',
+        'diciembre': 'dic'
+        }
+
+        columna_mes = meses_dict.get(mes_comparable.lower())
+        if not columna_mes:
+            raise ValueError(f"Mes '{mes_comparable}' no reconocido. Usá un nombre completo (por ejemplo: 'Octubre').")
+        
+        # Renombro algunas columnas para que tengan mas sentido
+        padron = padron.rename(columns={'n°':'numero_operacional'})
+
+        # Elimino las filas que tengan NA en su numero, nombre o mes comparable
+        padron = padron.dropna(subset=['numero_operacional', 'nombre', columna_mes], how='any')
+
+        # Convierto la columna de Numero Operacional efectivamente a INT
+        padron['numero_operacional'] = padron['numero_operacional'].astype(int)
+
+        # Trabajo sobre los Debitos TOTALES por Tienda
+        # Cargo el archivo CSV
+        try:
+            df_debitos_tienda = pd.read_csv(debitos_por_tienda, encoding='utf-16', header=1, decimal=',')
+        except Exception as e:
+            return f'Error a la hora de cargar los Debitos. ERROR: {e}'
+
+        # Estandarizo las columnas
+        df_debitos_tienda.columns = df_debitos_tienda.columns.str.lower().str.replace(' ', '_')
+
+        # Renombro columnas para que tengan mas sentido
+        df_debitos_tienda =df_debitos_tienda.rename(columns=
+            {
+            'cant._tickets_por_local':'valores',
+            'mes':'fecha',
+            }
+        )
+
+        # Convierto la columna de valores a numero
+        df_debitos_tienda['valores'] = pd.to_numeric(df_debitos_tienda['valores'].str.replace('.', '').str.replace(',','.'))
+
+        # Genero una columna de MES
+        df_debitos_tienda['mes'] = df_debitos_tienda['fecha'].str.split(' ').str[0]
+        
+        # Genero una columna para obtener el Numero de Tienda y convertirlo a INT
+        df_debitos_tienda['numero_operacional'] = df_debitos_tienda['punto_operacional'].str.split(' ').str[0].astype(int)
+
+        # Elimino las columnas que no me sirven
+        df_debitos_tienda = df_debitos_tienda.drop(columns=['indicadores', 'fecha'])
+        
+        # Genero una columna categorica para distinguir los debitos una vez que realice un concat con el volumen y las ventas
+        df_debitos_tienda['categoria'] = 'deb'
+
+        # Ordeno el df de la misma forma que el de Ventas y volumen para realizar un concat de los debitos, venta y volumen a nivel tienda
+        df_debitos_tienda = df_debitos_tienda[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria', 'valores']]
+
+        # Concateno todo a NIVEL TIENDA y Realizo un Join con el Padron
+        df_tienda = pd.concat([df_ventas_tienda, df_debitos_tienda, df_volumen_tienda])
+        df_tienda['numero_operacional'] = df_tienda['numero_operacional'].astype(int)
+
+        # Realizo el Join con el Padron
+        df_tienda_join = pd.merge(df_tienda, padron, how='left', on='numero_operacional')
+
+        # Selecciono las columnas que me quiero quedar para trabajar mas comodo
+        df_tienda_join = df_tienda_join[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'provincia', 'fecha_apertura', 'fin_de_cierre','categoria', columna_mes, 'valores']]
+
+        # Filtro el df unicamente por aquellos valores con SUPERFICIE COMPARABLE
+        df_tienda_comparable = df_tienda_join[df_tienda_join[columna_mes] == 'SC']
+
+        # Genero una copia del df con TODOS LOS VALORES para obtener sus progresiones tambien por Superficie TOTAL. Esto es util para el briefing de Maxi ya que tiene graficos a nivel total y por sup comparable
+        df_tienda_no_comparable = df_tienda_join
+
+        # Pivoteo la Informacion con el objetivo de llevar los valores por Año a las columnas y asi realizar el calculo de progresiones. Esto lo hago tanto para el df con valores comparables y valores total. EN ESTE PASO ESTOY CALCULANDO LAS PROGRESIONES POR TIENDA
+        df_tienda_comparable = df_tienda_comparable.pivot_table(values='valores', index=['direccion', 'numero_operacional', 'punto_operacional', 'categoria'], columns='año', aggfunc='sum').reset_index()
+        df_tienda_comparable['progresion'] = round((df_tienda_comparable[2025] / df_tienda_comparable[2024]) - 1, 3)
+        df_tienda_comparable = df_tienda_comparable.sort_values(by='progresion', ascending=False)
+
+        df_tienda_no_comparable = df_tienda_no_comparable.pivot_table(values='valores', index=['direccion', 'numero_operacional', 'punto_operacional', 'categoria'], columns='año', aggfunc='sum').reset_index()
+        df_tienda_no_comparable['progresion'] = round((df_tienda_no_comparable[2025] / df_tienda_no_comparable[2024]) - 1, 3)
+        df_tienda_no_comparable = df_tienda_no_comparable.sort_values(by='progresion', ascending=False)
+
+        # Genero un DF Auxiliar en este punto para luego concatenarlo con otros y asi tener una bajada consolidada de toda la informacion utilizada con el objetivo proximo re realizar un giratorio en Excel
+        df_tienda_comparable_aux = df_tienda_comparable
+
+        # Pivoteo la Informacion con el objetivo de llevar los valores por Año a las columnas y asi realizar el calculo de progresiones. Esto lo hago tanto para el df con valores comparables y valores total. EN ESTE PASO ESTOY CALCULANDO LAS PROGRESIONES POR FORMATO
+        df_formato_comparable = df_tienda_comparable.groupby(['direccion', 'categoria'])[[2024, 2025]].sum().reset_index()
+        df_formato_comparable['progresion'] = round(df_formato_comparable[2025] / df_formato_comparable[2024] - 1, 3)
+        df_formato_comparable_final = df_formato_comparable.sort_values(['categoria'])
+
+        df_formato_no_comparable = df_tienda_no_comparable.groupby(['direccion', 'categoria'])[[2024, 2025]].sum().reset_index()
+        df_formato_no_comparable['progresion'] = round(df_formato_no_comparable[2025] / df_formato_no_comparable[2024] - 1, 3)
+        df_formato_no_comparable_final = df_formato_no_comparable.sort_values(['categoria'])
+
+        # Una vez que ya tengo calculadas las progresiones por Formato y por Tienda, me falta calcular las progresiones por TIENDA y SECTOR. Ya que en el briefing la forma de mostrar las progresiones en principio es por Tienda y Formato, y luego se le coloca la progresion TOTAL de la tienda a la derecha de todo.
+
+        # Comienzo por Importar los Debitos por Sector
+        try:
+            df_debitos_sector = pd.read_csv(debitos_por_sector, encoding='utf-16', header=1, decimal=',')
+        except Exception as e:
+            return f'Error a la hora de cargar los Debitos por Sector. ERROR: {e}'
+
+        # Realizo las mismas transformaciones para los otros df, pero esta vez, para los debitos por sector
+        df_debitos_sector.columns = df_debitos_sector.columns.str.strip().str.lower().str.replace(' ', '_')
+        df_debitos_sector = df_debitos_sector.rename(columns=
+            {
+            'cantidad_de_tickets':'valores',
+            'mes':'fecha'
+            }
+        )
+        df_debitos_sector = df_debitos_sector.drop(columns=['indicadores'])
+        df_debitos_sector['mes'] = df_debitos_sector['fecha'].str.split(' ').str[0]
+        df_debitos_sector['numero_operacional'] = df_debitos_sector['punto_operacional'].str.split(' ').str[0]
+        df_debitos_sector['categoria'] = 'deb'
+        df_debitos_sector['valores'] = pd.to_numeric(df_debitos_sector['valores'].str.replace('.', '').str.replace(',','.'))
+
+        # Una vez que ya tengo los Debitos por Sector limpio y ordenado, me aseguro de agrupar el volumen sin envases y las ventas de igual forma, POR SECTOR
+        df_ventas_sector = df_ventas.groupby(['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria', 'sector'])['valores'].sum().reset_index()
+        df_volumen_sector = df_volumen.groupby(['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria', 'sector'])['valores'].sum().reset_index()
+        df_debitos_sector = df_debitos_sector[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria', 'sector', 'valores']]
+
+        # En este punto ya puedo concatenar los tres df y asi obtener uno solo consolidado para trabajar mas comodo
+        df_sector = pd.concat([df_ventas_sector, df_volumen_sector, df_debitos_sector])
+        df_sector['numero_operacional'] = df_sector['numero_operacional'].astype(int) 
+
+        # Realizo un Join con el Padron y asi poder Filtrar los valores comparables, ya que los calculos de las progresiones por SECTOR son SIEMPRE COMPARABLES
+        df_sector_join = pd.merge(df_sector, padron, on='numero_operacional', how='left')
+        df_sector_join = df_sector_join[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'provincia', 'fecha_apertura', 'fin_de_cierre', 'categoria', 'sector', columna_mes, 'valores']]
+        df_sector_comparable = df_sector_join[df_sector_join[columna_mes] == 'SC']
+
+        # Pivoteo la Info, coloco los años en las columnas y asi calculo las progresiones por Categoria (VCT, VOL y DEB) y Sector
+        df_sector_comparable = df_sector_comparable.pivot_table(values='valores', index=['direccion' ,'numero_operacional', 'punto_operacional', 'categoria', 'sector'], columns='año', aggfunc='sum').reset_index()
+        df_sector_comparable['progresion'] = round((df_sector_comparable[2025] / df_sector_comparable[2024]) - 1, 3)
+
+        # Sirve luego para calcular las progresiones por SECTOR a nivel FORMATO
+        df_formato_sector_comparable = df_sector_comparable
+
+        # DF auxiliar para realizar una baja consolidada de informacion
+        df_formato_sector_comparable_aux = df_formato_sector_comparable
+
+        # Pivoteo la Informacion para mostrar las progresiones por Sector
+        df_progresiones_categoria_sectores = df_sector_comparable.pivot_table(values='progresion', index=['numero_operacional', 'punto_operacional', 'categoria'], columns='sector', aggfunc='sum').reset_index()
+
+        # Aqui vuelvo a trabajar sobre el DF que contiene las progresiones a NIVEL TIENDA ya que ahora que tengo las progresiones por sector, tengo que unir las progresiones TOTAL TIENDA a las que estan aperturadas por SECTOR. Es por esto que renombro una de sus columnas para luego realizar un concat
+        df_tienda_comparable = df_tienda_comparable.rename(columns={'progresion':'total_tienda'})
+
+        # Ahora trabajo con un df auxiliar generado arriba para obtener las progresiones por SECTOR a Nivel FORMATO cerrado.
+        df_formato_sector_comparable = df_formato_sector_comparable.groupby(['direccion', 'categoria', 'sector'])[[2024, 2025]].sum().reset_index()
+        df_formato_sector_comparable['progresion'] = round(df_formato_sector_comparable[2025] / df_formato_sector_comparable[2024] - 1, 3)
+        df_formato_sector_comparable = df_formato_sector_comparable.pivot_table(values='progresion', index=['direccion', 'categoria'], columns='sector', aggfunc='sum').reset_index()
+        df_formato_sector_comparable = df_formato_sector_comparable.fillna(0)
+
+        # Realizo un JOIN entre el DF que contiene las Progresiones a NIVEL SECTOR con el DF que contiene las progresiones a nivel TIENDA, lo limpio, ordeno y presento
+        df_progresiones_join_sector_tienda = pd.merge(df_progresiones_categoria_sectores, df_tienda_comparable[['direccion', 'numero_operacional', 'categoria', 'total_tienda']], on=['numero_operacional', 'categoria'], how='left')
+        df_progresiones_join_sector_tienda = df_progresiones_join_sector_tienda.fillna(0)
+        df_progresiones_join_sector_tienda.columns = df_progresiones_join_sector_tienda.columns.str.capitalize().str.strip().str.replace('_', ' ')
+        df_progresiones_join_sector_tienda = df_progresiones_join_sector_tienda.drop(columns=['Numero operacional'])
+        df_progresiones_join_sector_tienda = df_progresiones_join_sector_tienda.rename(columns={'Total tienda': 'Total tienda', 'P.g.c.': 'PGC'})
+        df_progresiones_join_sector_tienda = df_progresiones_join_sector_tienda.sort_values(by='Total tienda', ascending=False)
+
+        # Trabajo ahora para ordenar y concatenar el DF con las Progresiones por Tienda y por Sector para realizar una bajada consolidada donde en una misma vista, tenga en las columnas los valores de las progresiones por VCT, DEB y VOL, aperturado por Sector y Joineado con el Total tienda de esa CATEGORIA
+        df_final_consolidado_tienda = df_tienda_comparable.drop(columns=[2024, 2025])
+        df_final_consolidado_tienda = df_final_consolidado_tienda.rename(columns={'total_tienda':'progresion'})
+        df_final_consolidado_tienda['sector'] = 'Total'
+
+        df_final_consolidado_sector = df_sector_comparable.drop(columns=[2024, 2025])
+        df_final_consolidado_sector[['direccion', 'numero_operacional', 'punto_operacional', 'categoria', 'progresion', 'sector']]
+
+        df_final_consolidado_total = pd.concat([df_final_consolidado_sector, df_final_consolidado_tienda])
+        df_final_consolidado_total = df_final_consolidado_total.pivot_table(values='progresion', index=['direccion', 'punto_operacional'], columns=['categoria', 'sector'], aggfunc='sum').reset_index()
+
+        # Ya que ahora tengo las primeras tablas con sus progresiones, comienzo a trabajar sobre el ultimo apartado, especifico sobre el volumen y su apertura por GRUPO DE FAMILIA
+        # Agrupo el DF de Volumen que ya tenia cargado hasta GF
+        df_volumen_grupo_de_familia = df_volumen.groupby(['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria', 'sector', 'seccion', 'grupo_de_familia'])['valores'].sum().reset_index()
+
+        # Lo Joineo con el Padron
+        df_volumen_grupo_de_familia_join = pd.merge(df_volumen_grupo_de_familia, padron[['numero_operacional', columna_mes]], on='numero_operacional', how='left')
+
+        # Me quedo unicamente con los valores comparables
+        df_volumen_grupo_de_familia_comparable = df_volumen_grupo_de_familia_join[df_volumen_grupo_de_familia_join[columna_mes] == 'SC']
+
+        # Pivoteo la informacion para colocar los años como columnas y asi poder calcular las progresiones, el GAP y la CMG
+        df_volumen_grupo_de_familia_comparable = df_volumen_grupo_de_familia_comparable.pivot_table(values='valores', index=['direccion', 'grupo_de_familia', 'seccion', 'categoria'], columns='año', aggfunc='sum').reset_index()
+        df_volumen_grupo_de_familia_comparable[2024] = df_volumen_grupo_de_familia_comparable[2024].fillna(0)
+        df_volumen_grupo_de_familia_comparable['GAP'] = df_volumen_grupo_de_familia_comparable[2025] - df_volumen_grupo_de_familia_comparable[2024]
+        df_volumen_grupo_de_familia_comparable['progresion'] = (df_volumen_grupo_de_familia_comparable[2025] / df_volumen_grupo_de_familia_comparable[2024]) - 1
+        df_volumen_grupo_de_familia_comparable['progresion'] = df_volumen_grupo_de_familia_comparable['progresion'].replace(np.inf, 0)
+        df_volumen_grupo_de_familia_comparable['progresion'] = df_volumen_grupo_de_familia_comparable['progresion'].replace(np.nan, 0)
+        df_volumen_grupo_de_familia_comparable.sort_values('progresion', ascending=False)
+
+        # Genero una columnas Auxiliar que contenga el Total 2024 por Formato para asi luego calcular la CMG de forma mas facil (Vectorizada) y ahorrar rendimiento
+        df_volumen_grupo_de_familia_comparable['total_2024_direccion'] = df_volumen_grupo_de_familia_comparable.groupby('direccion')[2024].transform('sum')
+        df_volumen_grupo_de_familia_comparable['Cmg'] = df_volumen_grupo_de_familia_comparable['GAP'] / df_volumen_grupo_de_familia_comparable['total_2024_direccion']
+        df_volumen_grupo_de_familia_comparable['Cmg'] = df_volumen_grupo_de_familia_comparable['Cmg'].fillna(0)
+        df_volumen_grupo_de_familia_comparable = df_volumen_grupo_de_familia_comparable.sort_values('Cmg', ascending=False)
+        df_volumen_grupo_de_familia_comparable = df_volumen_grupo_de_familia_comparable.rename(columns={'direccion':'Direccion','grupo_de_familia':'Grupo de familia', 'seccion':'Seccion', 'categoria':'Categoria', 'progresion':'Progresion'})
+        df_volumen_grupo_de_familia_comparable = df_volumen_grupo_de_familia_comparable.drop(columns=['total_2024_direccion'])
+
+        # Ordeno y Concateno todos los DF auxiliares que fui generando para obtener una sola bajada de informacion y en un futuro confeccionar un Giratorio
+        # Genero un DF auxiliar para realizar una bajada consolidada de informacion para generar un giratorio
+        df_tienda_comparable_aux['sector'] = ''
+        df_tienda_comparable_aux = df_tienda_comparable_aux[['direccion', 'numero_operacional', 'punto_operacional', 'categoria', 'sector', 2024, 2025, 'progresion']]
+        df_tienda_comparable_aux['aux'] = 'tienda'
+
+        df_formato_comparable_aux = df_formato_comparable.copy()
+        df_formato_comparable_aux['sector'] = ''
+        df_formato_comparable_aux['numero_operacional'] = ''
+        df_formato_comparable_aux['punto_operacional'] = ''
+        df_formato_comparable_aux = df_formato_comparable_aux[['direccion', 'numero_operacional', 'punto_operacional', 'categoria', 'sector', 2024, 2025, 'progresion']]
+        df_formato_comparable_aux['aux'] = 'formato'
+
+        df_formato_sector_comparable_aux['aux'] = 'sector'
+
+        df_bajada_consolidada = pd.concat([df_tienda_comparable_aux, df_formato_comparable_aux, df_formato_sector_comparable_aux])
+
+        # Finalmente comienzo a trabajar sobre las progresiones historicas de los formatos con el objetivo de Construir facilmente los graficos que se muestran en los Briefings
+        # Cargo toda la Info
+        try:
+            deb_acum = pd.read_csv(historico_debitos, encoding='utf-16', header=1, decimal=',')
+            cols = ['Año', 'Mes', 'Direccion', 'Punto Operacional', 'Ventas c/impuesto']
+            vct_acum = pd.read_csv(historico_ventas, encoding='utf-16', header=1, usecols=cols)
+            vol_acum = pd.read_csv(historico_volumen, encoding='utf-16', header=1)
+        except Exception as e:
+            return f'Error a la hora de cargar los Historicos. ERROR: {e}'
+
+        # Quito columnas innecesarias
+        deb_acum = deb_acum.drop(columns=['Indicadores'])
+        vol_acum = vol_acum.drop(columns=['Indicadores'])
+
+        # Renombro Columnas
+        deb_acum = deb_acum.rename(columns={'Cant. Tickets por Local':'valores'})
+        vol_acum = vol_acum.rename(columns={'VOLUMEN':'valores'})
+        vct_acum = vct_acum.rename(columns={'Ventas c/impuesto':'valores'})
+
+        # Categorizo las valores de los DF's
+        deb_acum['categoria'] = 'deb'
+        vol_acum['categoria'] = 'vol'
+        vct_acum['categoria'] = 'vct'
+
+        # Convierto sus columnas a Valores Numericos
+        vol_acum['valores'] = pd.to_numeric(vol_acum['valores'].str.replace('.','').str.replace(',', '.'))
+        vct_acum['valores'] = pd.to_numeric(vct_acum['valores'].str.replace('.','').str.replace(',', '.'))
+        deb_acum['valores'] = pd.to_numeric(deb_acum['valores'].str.replace('.', ''))
+
+        # Concateno los 3 DF's
+        acum_join = pd.concat([deb_acum, vol_acum, vct_acum])
+
+        # Estandarizo los nombres de las columnas
+        acum_join.columns = acum_join.columns.str.strip().str.replace(' ', '_').str.lower()
+
+        # Me aseguro que su Numero Operacional sea efectivamente un numero
+        acum_join['numero_operacional'] = acum_join['punto_operacional'].str.split(' ').str[0].astype(int)
+
+        # Joineo con el Padron
+        acum_join = pd.merge(acum_join, padron[['numero_operacional', columna_mes]], how='left')
+
+        # Genero un DF comparable 
+        acum_join_comparable = acum_join[acum_join[columna_mes] == 'SC']
+        acum_join_comparable = acum_join_comparable.rename(columns={'mes':'fecha'})
+        acum_join_comparable['mes'] = acum_join_comparable['fecha'].str.split(' ').str[0]
+        
+        # Genero un DF sup Total
+        acum_join_no_comparable = acum_join
+        acum_join_no_comparable = acum_join_no_comparable.rename(columns={'mes':'fecha'})
+        acum_join_no_comparable['mes'] = acum_join_no_comparable['fecha'].str.split(' ').str[0]
+
+        # Realizo transformaciones y calculos a ambos df's para conseguir sus progresiones historicas por categoria
+        acum_join_comparable = acum_join_comparable.groupby(['año', 'fecha', 'mes', 'direccion', 'categoria'])['valores'].sum().reset_index()
+        acum_join_no_comparable = acum_join_no_comparable.groupby(['año', 'fecha', 'mes', 'direccion', 'categoria'])['valores'].sum().reset_index()
+
+        # Genero un Diccionario Auxiliar
+        meses_orden = {'Enero':1, 'Febrero':2, 'Marzo':3, 'Abril':4, 'Mayo':5, 'Junio':6, 'Julio':7, 'Agosto':8, 'Septiembre':9, 'Octubre':10, 'Noviembre':11, 'Diciembre':12}
+
+        # Genero una columna Auxiliar Mapeando el Diccionario con la Columna Mes
+        acum_join_comparable['aux'] = acum_join_comparable['mes'].map(meses_orden)
+        acum_join_no_comparable['aux'] = acum_join_no_comparable['mes'].map(meses_orden)
+
+        # Invierto el Diccionario Auxiliar
+        meses_invertidos = {v:k for k, v in meses_orden.items()}
+
+        # Genero una Columna Datetime concatenando varios elementos de los DF's con el Objetivo de limitar los datos al mes comparable seleccionado
+        acum_join_comparable.sort_values(by='aux', ascending=True)
+        acum_join_comparable['fecha_completa'] = pd.to_datetime(
+            '01/' + acum_join_comparable['aux'].astype(str) + '/' + acum_join_comparable['año'].astype(str), format='%d/%m/%Y')
+
+        acum_join_no_comparable.sort_values(by='aux', ascending=True)
+        acum_join_no_comparable['fecha_completa'] = pd.to_datetime(
+            '01/' + acum_join_no_comparable['aux'].astype(str) + '/' + acum_join_no_comparable['año'].astype(str), format='%d/%m/%Y')
+
+        # Genero una Variable utilizando el mes comparable para limitar los registros del 2025 hasta ese mes en particular
+        fecha_tope = pd.to_datetime('01/'+ str(meses_orden[mes_comparable]) + '/' + '2025', format='%d/%m/%Y')
+
+        # Hago efectivo el limite
+        acum_join_comparable = acum_join_comparable[acum_join_comparable['fecha_completa'] <= fecha_tope]
+        acum_join_no_comparable = acum_join_no_comparable[acum_join_no_comparable['fecha_completa'] <= fecha_tope]
+
+        # Pivoteo la Informacion para colocar los años como columnas y calcular las progresiones
+        acum_join_comparable = acum_join_comparable.pivot_table(values='valores', columns='año', index=['direccion', 'mes', 'categoria', 'aux'], aggfunc='sum').reset_index()
+        acum_join_no_comparable = acum_join_no_comparable.pivot_table(values='valores', columns='año', index=['direccion', 'mes', 'categoria', 'aux'], aggfunc='sum').reset_index()
+
+        # Calculo las Progresiones
+        acum_join_comparable['progresion 2024'] = round((acum_join_comparable[2024] / acum_join_comparable[2023]) - 1, 3)
+        acum_join_comparable['progresion 2025'] = round((acum_join_comparable[2025] / acum_join_comparable[2024]) - 1, 3)
+
+        acum_join_no_comparable['progresion 2024'] = round((acum_join_no_comparable[2024] / acum_join_no_comparable[2023]) - 1, 3)
+        acum_join_no_comparable['progresion 2025'] = round((acum_join_no_comparable[2025] / acum_join_no_comparable[2024]) - 1, 3)
+
+        # Ordeno y Elimino columna Auxiliar
+        acum_join_comparable = acum_join_comparable.sort_values(by=['direccion', 'categoria' ,'aux'], ascending=[True, True, True])
+        acum_join_comparable = acum_join_comparable.drop(columns=['aux'])
+
+        acum_join_no_comparable = acum_join_no_comparable.sort_values(by=['direccion', 'categoria' ,'aux'], ascending=[True, True, True])
+        acum_join_no_comparable = acum_join_no_comparable.drop(columns=['aux'])
+
+        # Exporto todo a Excel
+        formatos = df_tienda_comparable['direccion'].unique().tolist()
+        categorias = ['vct', 'deb', 'vol']
+
+        try:
+            output_zip = io.BytesIO()
+
+            with zipfile.ZipFile(output_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+
+                for formato in formatos:
+                    # Creamos un buffer en memoria para el Excel
+                    excel_buffer = io.BytesIO()
+
+                    with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+
+                        df_formato_comparable_final[df_formato_comparable_final['direccion'] == formato].to_excel(writer, sheet_name=f'Total Categoria - {formato[0:3]}', index=False)
+                        df_formato_no_comparable_final[df_formato_no_comparable_final['direccion'] == formato].to_excel(writer, sheet_name=f'Total Categoria (Sup Total) - {formato[0:3]}'[0:31], index=False)
+                        df_formato_sector_comparable[df_formato_sector_comparable['direccion'] == formato].to_excel(writer, sheet_name=f'Total Categoria x Sector - {formato[0:3]}', index=False)
+
+                        for categoria in categorias:
+                            df_filtrado = df_progresiones_join_sector_tienda[
+                                (df_progresiones_join_sector_tienda['Categoria'] == categoria) &
+                                (df_progresiones_join_sector_tienda['Direccion'] == formato)
+                            ]
+                            df_filtrado = df_filtrado.drop(columns=['Direccion'])
+                            df_filtrado.to_excel(writer, sheet_name=f'{categoria} - {formato[0:3]}', index=False)
+
+                        df_final_consolidado_total[df_final_consolidado_total['direccion'] == formato].to_excel(writer, sheet_name=f'Info Consolidada - {formato[0:3]}', index=True)
+                        df_volumen_grupo_de_familia_comparable[df_volumen_grupo_de_familia_comparable['Direccion'] == formato].to_excel(writer, sheet_name=f'GF Consolidada - {formato[0:3]}', index=False)
+                        acum_join_comparable[acum_join_comparable['direccion'] == formato].to_excel(writer, sheet_name=f'Progresiones comp - {formato[0:3]}', index=False)
+                        acum_join_no_comparable[acum_join_no_comparable['direccion'] == formato].to_excel(writer, sheet_name=f'Progresiones total - {formato[0:3]}', index=False)
+
+                    # Nombrar el archivo
+                    file_name = f"Resultados Briefing {formato.upper()} ({datetime.today().strftime('%d-%m-%Y')}).xlsx"
+
+                    # Agregar el archivo Excel al ZIP
+                    excel_buffer.seek(0)
+                    zf.writestr(file_name, excel_buffer.read())
+
+                buffer_giratorio = io.BytesIO()
+                with pd.ExcelWriter(buffer_giratorio, engine='xlsxwriter') as writer:
+                    df_bajada_consolidada.to_excel(writer, sheet_name="Base Giratorio", index=False)
+                buffer_giratorio.seek(0)
+                zf.writestr("Base Giratorio.xlsx", buffer_giratorio.read())
+
+            output_zip.seek(0)
+            return output_zip
+
+        except Exception as e:
+            return f"No se logró generar el ZIP. ERROR: {e}"
+
+    except Exception as e:
+        return f"Ocurrio un Error a la hora de generar los calculos de las progresiones. ERROR: {e}"
