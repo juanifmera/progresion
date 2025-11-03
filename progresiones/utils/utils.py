@@ -2167,3 +2167,283 @@ def briefing(ventas_y_volumen_por_tienda, debitos_por_tienda, padron, debitos_po
 
     except Exception as e:
         return f"Ocurrio un Error a la hora de generar los calculos de las progresiones. ERROR: {e}"
+    
+def analisis_horario_extendido(ventas_por_media_hora_arch, margen_arch, costo_horas_hombre_arch, horas_autorizadas_arch):
+    '''
+    Funcion para generar rapidamente un analisis sobre un conjunto de tiendas express cuyo horario de apertura y cierre los dias domingos fueron afectados.
+
+    La idea de este flujo es automatizar el analisis mediante la carga de informacion como, la cantidad de horas aprobadas los domingos por tienda, su Venta con Tasa por media hora, para determinar la venta en el horario extendido, y otros detalles importantes como el costo de hora hombre mas cargas sociales de domingos y el ratio general de margen de la tienda. Con toda esta informacion se podrá calcular un ROC estimado en el horario extendido los dias domingos, que nos ayudará a determinar si es rentable o no mantener un horario extendido los dias domingos de las tiendas afectadas.
+
+    A continuacion se deja el detalle de informacion necesaria para completar este analisis y reporte.
+
+    1- Ventas por Media Hora --> Reporte de MicroStrategy. EN este caso de lista la venta acumulada desde Abril hasta la fecha por media Hora, Punto Operacional y Direccion. (SOLO LAS TIENDAS DE EXPRSS). Como la informacion es infinita en este caso, el primer formato que arroja MICRO es en LONG. El flujo toma esta infomracion y la hace WIDE
+
+    2- Margen --> Informacion de las Ventas sin Tasa y la masa del margen. Esta informacion sale del reporte de Margen x Tienda hecho por David. Lo que se debe hacer es agrupar el margen asya lograr dos lineas por tienda, una de margen y otra de venta.
+
+    3- Costo Horas Hombre --> Esta informacion se la solicito a Sebas. La idea es que el complete un archivo subido a Drive, donde se va a encontrar el detalle de las tiendas y los meses.
+
+    4- Horas Autorizadas --> Esta infomracion se la solicito a Sebas. La idea es que el complete un archivo subido a Drive, donde se va a encontrar el detalle de las tiendas y los meses
+    '''
+    try:
+        ### COMIENZO IMPORTANDO EL REPORTE DE VENTAS, LO TRANSFORMO Y LE AGREGO INFORMACION NECESARIA PARA OBTENER EL DIA DE LA SEMANA, ETC. ###
+
+        # Cargo la Informacion de Ventas Historico en Formato Long
+        df = pd.read_csv(ventas_por_media_hora_arch, encoding='utf-16', header=2)
+        # Genero Copia del DF
+        df = df.copy()
+        # Genero un Slicing
+        df = df[1:]
+        # Renombro algunas columnas para trabajar mas comodod
+        df = df.rename(columns={
+            ' ':'año',
+            ' .2':'fecha',
+            ' .3':'hora'
+        })
+        # Elimino aquellas columnas que molestan
+        df = df.drop(columns=[c for c in [' .1', 'Punto Operacional'] if c in df.columns])
+        # Derrito el df para trabajar en forto "Wide"
+        df = df.melt(id_vars=['año', 'fecha', 'hora'], var_name='tiendas', value_name='vct').dropna(subset=['vct'])
+        # Hago un reset Index y elimino el anterior que no estaba ordenado
+        df = df.reset_index().drop(columns=['index'])
+        # Transformo la columna de VCT a INT
+        df['vct'] = pd.to_numeric(df['vct'].str.replace('.', '').str.replace(',', '.'), errors='coerce')
+        # Genero una columna para trabajar con el mes
+        df['mes'] = df['fecha'].str.strip().str.split(' ').str[2].str.strip()
+        # Genero una columna para obtener el dia (Luego nos servira para filtrar unicamente los datos de los domingos)
+        df['dia'] = df['fecha'].str.strip().str.split(' ').str[0].astype(str)
+        # Genero una columna para obtener el NO (Numero Operacional) "ID tienda"
+        df['no'] = df['tiendas'].str.split(' ').str[0].astype(int)
+
+        # Genero listas auxiliares para confeccionar un diccionario de forma rapida y luego realizar un Mapeo
+        mes = 'Enero Febrero Marzo Abril Mayo Junio Julio Agosto Septiembre Octubre Noviembre Diciembre'.split(' ')
+        num_mes = '1 2 3 4 5 6 7 8 9 10 11 12'.split(' ')
+        mes_orden = dict(zip(mes, num_mes))
+
+        # Genero una columna auxiliar con el numero del mes para generar luego una fecha Parseada
+        df['mes_numerico'] = df['mes'].map(mes_orden)
+        df['fecha_parsed'] = df['mes_numerico'] + '/' + df['dia'] + '/' + df['año'].astype(str)
+
+        # Convierto la fecha parseada a DateTime y asi obtengo el detalle del dia de la semana para luego filtrar la informacion unicamente de los domigos
+        df['fecha_final'] = pd.to_datetime(df['fecha_parsed'], format='%m/%d/%Y')
+        # Obtengo el detalle del nombre del dia a partir de la columna generada anteriormente
+        df['nombre_dia'] = df['fecha_final'].dt.day_name()
+
+        # Genero un nuevo df UNICAMENTE con la informacion de los Domingos
+        df_domingos = df[df['nombre_dia'] == 'Sunday']
+        # Genero columna NO
+        df_domingos['no'] = df_domingos['tiendas'].str.split(' ').str[0].astype(str)
+
+        # Creamos columna mes-año
+        df_domingos['mes'] = df_domingos['fecha_final'].dt.month_name()
+        df_domingos['mes'] = df_domingos['mes'].astype(str).str.lower()
+
+        # Extraemos hora de inicio
+        df_domingos['hora_inicio'] = df_domingos['hora'].str.extract(r'Desde (\d{2}:\d{2})')[0]
+        # Convertimos a objeto time
+        df_domingos['hora_inicio'] = pd.to_datetime(df_domingos['hora_inicio'], format='%H:%M').dt.time
+
+        ### CARGO Y TRABAJO SOBRE EL DETALLE DE COSTO HORAS HOMBRE ###
+        costo_horas_hombre = pd.read_excel(costo_horas_hombre_arch, sheet_name='costo_ho')
+        # Elimino las columnas que estan en Nulo
+        costo_horas_hombre = costo_horas_hombre.dropna(axis=1)
+        # Genero un bucle para renombrar las columnas de forma correcta. En caso de que el nombre de la columna sea datetime, le coloca el nombre del mes en ingles en minuscula. Caso contrario, coloca el nombre en minuscula
+        for col in costo_horas_hombre.columns:
+            if isinstance(col, datetime):
+                costo_horas_hombre = costo_horas_hombre.rename(columns={
+                    col:pd.to_datetime(col).month_name().lower().strip()
+                })
+            else:
+                costo_horas_hombre = costo_horas_hombre.rename(columns={
+                    col:col.lower().strip()
+                })
+
+        # Derrito el DF para trabajar con el detalle de los meses como variable
+        costo_horas_hombre = costo_horas_hombre.melt(id_vars=['no', 'nombre', 'localidad', 'zona', 'gerente regional', 'domingos', 'horario_anterior'], value_name='costo_hora_hombre', var_name='mes')
+        # Multiplico los valores por -1 para convertir su valor a negativo
+        costo_horas_hombre['costo_hora_hombre'] = costo_horas_hombre['costo_hora_hombre'] * - 1
+
+        ### GENERO UN DF AUXILIAR PARA CONTABILIZAR LA CANTIDAD DE dOMINGOS POR MES ###
+        # Contamos domingos por mes
+        domingos_por_mes = df_domingos.groupby('mes')['fecha_final'].nunique().reset_index()
+        domingos_por_mes.columns = ['mes', 'cantidad_domingos']
+
+        ### CARGO Y TRABAJO SOBRE EL MARGEN ### 
+
+        # Cargo el Margen. El formato de descarga de Tableau me tira el reporte con Separadores de ";". Verificar que esto en la computadora del trabajo sea igual
+        margen = pd.read_csv(margen_arch, sep=';')
+        # Pivoteo la informacion para colocar el "Rubro" es decir el Margen y la Venta sin Tasa, para asi calcular el Ratio Margen por tienda y finalmente llevarlo al DF principal
+        margen = margen.pivot_table(values='Importe Ars', columns='RUBRO_CONCAT (grupo) 1', index=['Periodo', 'Tienda'], aggfunc='sum').reset_index()
+        # Relleno valores nulos con ceros para no tener problemas a la hora de dividir valores
+        margen['VENTA SIN TASA'] = margen['VENTA SIN TASA'].fillna(0)
+        # Convierto los valores a Numericos antes de realizar su division
+        margen['MARGEN COMERCIAL'] = pd.to_numeric(margen['MARGEN COMERCIAL'].str.replace(',', '.')).round(2)
+        margen['VENTA SIN TASA'] = pd.to_numeric(margen['VENTA SIN TASA'].str.replace(',', '.')).round(2)
+        # Genero la columna de Ratio Margen
+        margen['ratio_margen'] = (margen['MARGEN COMERCIAL'] / margen['VENTA SIN TASA']).round(2)
+        # Relleno con ceros por las dudas aquellos valores nulos
+        margen = margen.fillna(0)
+        # genero una columna auxiliar para obtener el "numero del mes"
+        margen['mes_numerico'] = margen['Periodo'].astype(str).str.split('2025').str[1]
+        # Genero una columna auxiliar con el año
+        margen['año'] = '2025'
+        # Parseo todas estas columnas
+        margen['fecha_parsed'] = margen['mes_numerico'] + '/01/' + margen['año']
+        # Convierto la columna Parseada a Datetime
+        margen['fecha_final'] = pd.to_datetime(margen['fecha_parsed'], format='%m/%d/%Y')
+        # Obtengo el detalle del nombre del mes, en ingles. Este detalle, mas el NO, me servirá para realizar un Join entre este DF y el Principal
+        margen['mes'] = margen['fecha_final'].dt.month_name().str.lower()
+        # Convierto el NO en Numero
+        margen['Tienda'] = margen['Tienda'].astype(int)
+        # Renombro la columna para que tenga sentido
+        margen = margen.rename(columns={'Tienda':'no'})
+
+        ### CAROG EL DETALLE AUTORIZADAS POR DOMINGO DE LAS TIENDAS ###
+        # En este punto, ya tengo toda la informacion auxiliar para ir joineando con el DF principal, por loq ue la mayoria de transofmraciones y JOINS ocurren en este bloque de codigo
+        horas_autorizadas = pd.read_excel(horas_autorizadas_arch, sheet_name='horas_dom')
+        # Elimino las columnas que estan en Nulo
+        horas_autorizadas = horas_autorizadas.dropna(axis=1)
+        # Genero un bucle para renombrar las columnas de forma correcta. En caso de que el nombre de la columna sea datetime, le coloca el nombre del mes en ingles en minuscula. Caso contrario, coloca el nombre en minuscula
+        for col in horas_autorizadas.columns:
+            if isinstance(col, datetime):
+                horas_autorizadas = horas_autorizadas.rename(columns={
+                    col:pd.to_datetime(col).month_name().lower().strip()
+                })
+            else:
+                horas_autorizadas = horas_autorizadas.rename(columns={
+                    col:col.lower().strip()
+                })
+
+        # Derrito el df de LONG a Wide para colocar el detalle de los meses en las columnas y asi, comenzar a concatenar toda la informacion a este DF que sera el Final
+        horas_autorizadas = horas_autorizadas.melt(id_vars=['no', 'nombre', 'localidad', 'zona', 'gerente regional', 'domingos', 'horario_anterior'], value_name='horas', var_name='mes')
+        # Concateno el df Auxiliar con el detalle de la cantidad de domingos por mes al DF principal
+        horas_autorizadas = pd.merge(right=domingos_por_mes, left=horas_autorizadas, on='mes', how='left')
+        # Divido la cantidad de horas autorizadas del mes, por la cantidad de domingos para obtener la cantidad de Horas Autorizadas del Mes POR DOMINGO
+        horas_autorizadas['horas_por_domingo'] = round(horas_autorizadas['horas'] / horas_autorizadas['cantidad_domingos'],1)
+        # Genero un DF auziliar para calcular la Hora Promedio por Domingo del pormedio de Abril y Mayo (MESES ANTERIOR A REALIZAR LA EXTENSION HORARIA)
+        horas_prom_mayo_abril = horas_autorizadas[horas_autorizadas['mes'].isin(['april', 'may'])].groupby(['no'])['horas'].mean().reset_index().rename(columns={'horas':'horas_promedio_abril_y_mayo'})
+        horas_prom_mayo_abril['horas_promedio_abril_y_mayo'] = (horas_prom_mayo_abril['horas_promedio_abril_y_mayo'] / 4).round(2)
+        # Concateno el DF con las horas autorizadas para poder calcular luego la el crecimiento y diferencia de horario x Domingo por Tienda
+        horas_autorizadas = pd.merge(horas_autorizadas, horas_prom_mayo_abril, on='no', how='left')
+        horas_autorizadas['crecimiento_horas_domingo'] = (horas_autorizadas['horas_por_domingo'] / horas_autorizadas['horas_promedio_abril_y_mayo'] - 1).round(2)
+        horas_autorizadas['horas_adicionales_por_domingo'] = horas_autorizadas['horas_por_domingo'] - horas_autorizadas['horas_promedio_abril_y_mayo']
+
+        # Genero un DF Auxiliar para trabajar ahora sobre la hora de Apertura y Cierre que tenian las tiendas antes, para luego filtrar unicamente la venta fuera de esos horarios "Normales"
+        horarios_domingos = horas_autorizadas[['no', 'horario_anterior']].drop_duplicates()
+        # Separo el horario de cierre y apertura, luego lo convierto a TIME
+        horarios_domingos['horario_apertura'] = pd.to_datetime(horarios_domingos['horario_anterior'].str.split(' ').str[0], format='%H:%M', errors='coerce').dt.time
+        horarios_domingos['horario_cierre'] = pd.to_datetime(horarios_domingos['horario_anterior'].str.split(' ').str[2], format='%H:%M', errors='coerce').dt.time
+
+        # Me aseguro que su NO sea Int para realizar con exito un Merge entre el DF principal y asi colocarle a cada una de las tiendas, su horario de apertura y cierre convertido a DATETIME
+        horarios_domingos['no'] = horarios_domingos['no'].astype(int)
+        horas_autorizadas = pd.merge(horas_autorizadas, horarios_domingos[['no', 'horario_apertura', 'horario_cierre']], on='no', how='left')
+
+        # Me aseguro que el NO del DF donde coloque los horarios de las tiendas y el DF donde contiene la informacion de las ventas por media hora, Dia y Mes para realizar un MERGE. De esta forma Ahora no solamente voy a poder filtrar la informacion de los Domingos, sino tambien las ventas unicamente ocurridas entre el Horario Extendido
+        horarios_domingos['no'] = horarios_domingos['no'].astype(int)
+        df_domingos['no'] = df_domingos['no'].astype(int)
+        df_domingos = pd.merge(df_domingos, horarios_domingos[['no', 'horario_apertura', 'horario_cierre']], how='left', on='no').dropna(subset=['horario_apertura'])
+
+        # Genero el DF donde tengo solamente las ventas que necesito. Filtramos ventas fuera del horario normal (es decir, en horario extendido)
+        ventas_horario_extendido = df_domingos[(df_domingos['hora_inicio'] < df_domingos['horario_apertura']) | (df_domingos['hora_inicio'] >= df_domingos['horario_cierre'])]
+        # Ahora que tengo las ventas que quiero, unicamente me falta agruparlas para perder los detalles mas chicos. ORdeno estos valores tambien
+        ventas_horario_extendido = ventas_horario_extendido.groupby(['no', 'mes'])['vct'].sum().reset_index().sort_values(by='no')
+        # Concateno el DF que contiene la Venta Con tasa de los domingos, exclusivamente del horario extendido a las tiendas, teniendo en cuenta no solamente su NO sino el detalle del MES!
+        horas_autorizadas = pd.merge(horas_autorizadas, ventas_horario_extendido, on=['no', 'mes'], how='left')
+        # Relleno valores nulos con 0. Esto quiere decir que hay un conjunto de tiendas que NO tienen ventas en los horarios extendidos. Esto es precisamente porque hay tiendas que en los meses abril y mayo no tuvieron ventas
+        horas_autorizadas['vct'] = horas_autorizadas['vct'].fillna(0)
+        # Genero una nueva columna para calcular la VENTA SIN TASA, es decir, le quito los impuestos
+        horas_autorizadas['vst'] = horas_autorizadas['vct'] * (1 - 0.2650)
+
+        # Concateno el DF principal con el DF que contiene el detalle del ratio del margen por tienda y MES
+        horas_autorizadas = pd.merge(horas_autorizadas, margen[['no', 'mes', 'ratio_margen']], how='left', on=['no', 'mes'])
+        # Con la Ayuda del Ratio Margen y la Venta sin Tasa, calculo la Masa del Margen
+        horas_autorizadas['margen'] = (horas_autorizadas['vst'] * horas_autorizadas['ratio_margen']).round(2)
+        # calculo los gastos variables teniendo en cuenta la Venta sin Tasa
+        horas_autorizadas['gastos_variables'] = horas_autorizadas['vst'] * - 0.02
+        # Concateno el costo de horas hombre al DF principal
+        horas_autorizadas = pd.merge(horas_autorizadas, costo_horas_hombre[['no', 'mes', 'costo_hora_hombre']], on=['no', 'mes'], how='left')
+        # Calculo las horas adicionales totales por mes por tienda
+        horas_autorizadas['horas_adicionales_total_mes'] = horas_autorizadas['horas_adicionales_por_domingo'] * horas_autorizadas['cantidad_domingos']
+        # Multiplico la cantidad de horas adicionales por mes por el costo de horas hombre para obtener el costo total por mes por tienda
+        horas_autorizadas['gasto_de_personal'] = horas_autorizadas['horas_adicionales_total_mes'] * horas_autorizadas['costo_hora_hombre']
+        # Con el margen, los gastos variables y los gastos de personal, calculo el ROC en el horario extendido los dias Domingos
+        horas_autorizadas['roc'] = (horas_autorizadas['margen'] + horas_autorizadas['gastos_variables'] + horas_autorizadas['gasto_de_personal']).round(2)
+        # Renombro columnas para que tengan mas sentido
+        horas_autorizadas = horas_autorizadas.rename(columns={
+            'mes':'mes_ing',
+            'horas':'horas_autorizadas',
+            'domingos':'horario_domingo',
+        })
+        # Genero un diccionario Auxiliar para traducir los meses de Ingles a Castellano
+        dic_meses = {
+            'january': 'enero',
+            'february': 'febrero',
+            'march': 'marzo',
+            'april': 'abril',
+            'may': 'mayo',
+            'june': 'junio',
+            'july': 'julio',
+            'august': 'agosto',
+            'september': 'septiembre',
+            'october': 'octubre',
+            'november': 'noviembre',
+            'december': 'diciembre'
+        }
+        # Genero la columna con los meses en castellano 
+        horas_autorizadas['mes_esp'] = horas_autorizadas['mes_ing'].map(dic_meses)
+        # Ordeno el DF
+        horas_autorizadas = horas_autorizadas[['no', 'nombre', 'localidad', 'zona', 'gerente regional',  'mes_esp', 'horario_domingo', 'horario_anterior', 'horas_autorizadas', 'cantidad_domingos', 'horas_por_domingo', 'horas_promedio_abril_y_mayo', 'crecimiento_horas_domingo', 'horas_adicionales_por_domingo', 'horas_adicionales_total_mes', 'vct', 'vst', 'ratio_margen','margen', 'gastos_variables', 'costo_hora_hombre', 'gasto_de_personal', 'roc']]
+        # Genero un bucle para redondear todos los valores numericos, excepto los porcentajes 
+        for col in horas_autorizadas.select_dtypes('number').columns:
+
+            if col == 'ratio_margen' or col == 'crecimiento_horas_domingo':
+                horas_autorizadas[col] = horas_autorizadas[col].round(2)
+                
+            else:
+                horas_autorizadas[col] = horas_autorizadas[col].round(1)
+
+        # Pivoteo la Informacion para mostrarla en formato LONG
+        horas_autorizadas = horas_autorizadas.pivot_table(values=['horas_autorizadas', 'cantidad_domingos', 'horas_por_domingo', 'horas_promedio_abril_y_mayo', 'crecimiento_horas_domingo', 'horas_adicionales_por_domingo', 'horas_adicionales_total_mes', 'vct', 'vst', 'ratio_margen','margen', 'gastos_variables', 'costo_hora_hombre', 'gasto_de_personal', 'roc'], columns='mes_esp', index=['no', 'nombre', 'localidad', 'zona', 'gerente regional', 'horario_domingo', 'horario_anterior'], aggfunc='sum')
+
+        # Ordeno las columans de orden mayor y de orden menor
+        orden_columnas_primer_nivel = [
+            'horas_autorizadas', 'cantidad_domingos', 'horas_por_domingo',
+            'horas_promedio_abril_y_mayo', 'crecimiento_horas_domingo',
+            'horas_adicionales_por_domingo', 'horas_adicionales_total_mes',
+            'vct', 'vst', 'ratio_margen', 'margen', 'gastos_variables',
+            'costo_hora_hombre', 'gasto_de_personal', 'roc'
+            ]
+        horas_autorizadas = horas_autorizadas.reindex(orden_columnas_primer_nivel, level=0, axis=1)
+        orden_columnas_segundo_nivel = ['abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+        horas_autorizadas = horas_autorizadas.reindex(orden_columnas_segundo_nivel, level=1, axis=1)
+
+        horas_autorizadas = horas_autorizadas.reset_index()
+
+        #--- FORMATEO FINAL DE COLUMNAS ---
+        # Formatear nombres del MultiIndex (capitalizar y reemplazar guiones bajos)
+        horas_autorizadas.columns = pd.MultiIndex.from_tuples([
+        (
+        str(col[0]).replace('_', ' ').capitalize(),
+        str(col[1]).replace('_', ' ').capitalize()
+        )
+        for col in horas_autorizadas.columns
+        ])
+
+        # Tomo el ultimo mes de la muestra para ordenar los valores en base al ultimo mes. Aquellos valores mas bajos, primeros
+        ultimo_mes_variable = domingos_por_mes['mes'].to_list()[-1]
+        # Ordeno el DF
+        horas_autorizadas = horas_autorizadas.sort_values(by=('Roc', dic_meses[ultimo_mes_variable].capitalize()), ascending=True)
+        # Exporto el resultado final a EXCEL al path Results
+        try:
+            output = io.BytesIO()
+
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                horas_autorizadas.reset_index().to_excel(writer, sheet_name='data', index=True)
+
+            output.seek(0)
+            return output
+        
+        except Exception as e:
+            return f'Ocurrio un problema a la hora de generar hoja de calculos. Detalle del Error: {e}'
+    
+    except Exception as e:
+        return f'Ocurrio un error a la hora de Generar el reporte para las tiendas con Horario Extendido de Express los dias Domingos. Detalle del Error: {e}'
