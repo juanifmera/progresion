@@ -405,7 +405,7 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         'volumen':'valores'
         }, inplace=True)
 
-        #Categorizo los valores tanto de volumne como de Ventas
+        #Categorizo los valores tanto de volumen como de Ventas
         ventas['categoria'] = 'VCT'
         volumen['categoria'] = 'VOL'
 
@@ -735,7 +735,7 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
             with pd.ExcelWriter(output, engine="openpyxl") as writer:
                 logger.info("💾 Comenzando a escribir Excel en memoria")
                 
-                df_total_cia.to_excel(writer, sheet_name=f"Prog Acum Carrefour - SC", index=False)
+                df_total_cia.to_excel(writer, sheet_name=f"Prog Acum Carrefour - SC", index=True)
                 df_acum_formato.to_excel(writer, sheet_name=f"Prog Acum Formatos - SC", index=False)
                 df_acum_provincia.to_excel(writer, sheet_name="Prog Acum Provincia - SC", index=True)
                 df_progresiones_provincia_abierto.to_excel(writer, sheet_name="Prog Acum Prov Abierto - SC", index=True)
