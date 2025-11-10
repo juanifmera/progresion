@@ -2447,3 +2447,95 @@ def analisis_horario_extendido(ventas_por_media_hora_arch, margen_arch, costo_ho
     
     except Exception as e:
         return f'Ocurrio un error a la hora de Generar el reporte para las tiendas con Horario Extendido de Express los dias Domingos. Detalle del Error: {e}'
+
+import pandas as pd
+import io
+
+def dia_de_semana(archivo_csv, mes_comparable, padron=None):
+    '''
+    Función para procesar un archivo CSV (de MicroStrategy) y devolver los días de semana, mes y año.
+    '''
+    try:
+        try:
+            df = pd.read_csv(archivo_csv, header=1, encoding='utf-16', decimal=',')
+        except Exception as e:
+            raise ValueError(f"El archivo no se cargó correctamente como DataFrame. Verificá el encoding o el formato del CSV. ERROR: {e}")
+        
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError("El archivo cargado no es un DataFrame válido.")
+
+        # Normalización de columnas
+        df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
+
+        # Procesamiento de fechas
+        df['dia'] = df['dia'].str.strip()
+        df['año'] = df['dia'].str.split(' ').str[4].astype(str)
+        df['mes'] = df['dia'].str.split(' ').str[2].astype(str)
+        df['dia_de_la_semana'] = df['dia'].str.split(' ').str[0].astype(str)
+
+        meses = 'Enero Febrero Marzo Abril Mayo Junio Julio Agosto Septiembre Octubre Noviembre Diciembre'.split()
+        nums = list(map(str, range(1, 13)))
+        mes_orden = dict(zip(meses, nums))
+
+        df['mes_numerico'] = df['mes'].map(mes_orden)
+        df['fecha_parsed'] = df['mes_numerico'] + '/' + df['dia_de_la_semana'] + '/' + df['año']
+        df['fecha_final'] = pd.to_datetime(df['fecha_parsed'], format='%m/%d/%Y')
+        df['nombre_dia'] = df['fecha_final'].dt.day_name()
+
+        dias_castellano = {
+            'Monday': 'Lunes',
+            'Tuesday': 'Martes',
+            'Wednesday': 'Miercoles',
+            'Thursday': 'Jueves',
+            'Friday': 'Viernes',
+            'Saturday': 'Sabado',
+            'Sunday': 'Domingo'
+        }
+
+        df['dia_de_semana_castellano'] = df['nombre_dia'].map(dias_castellano)
+
+        # Renombrar columnas para mejorar visualización
+        df.columns = df.columns.str.replace('_', ' ').str.capitalize()
+
+        # Si viene con detalle de tienda
+        if 'Punto operacional' in df.columns:
+            df['no'] = df['Punto operacional'].str.split(' ').str[0].astype(int)
+
+            try:
+                cols = ['N°', 'NOMBRE', 'Fecha apertura', 'BANDERA', 'ORGANIZACIÓN ', 'PROVINCIA', 'FIN DE CIERRE',
+                        'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']
+                padron = pd.read_excel(padron, header=17, usecols=cols)
+            except Exception as e:
+                return f'Error a la hora de cargar el Padrón. ERROR: {e}'
+
+            padron.columns = padron.columns.str.lower().str.strip().str.replace(' ', '_').str.replace('.2', '')
+            padron = padron.rename(columns={'n°': 'no'})
+
+            meses_dict = {
+                'enero': 'ene', 'febrero': 'feb', 'marzo': 'mar', 'abril': 'abr',
+                'mayo': 'may', 'junio': 'jun', 'julio': 'jul', 'agosto': 'ago',
+                'septiembre': 'sep', 'octubre': 'oct', 'noviembre': 'nov', 'diciembre': 'dic'
+            }
+
+            columna_mes = meses_dict.get(mes_comparable.lower())
+            if not columna_mes:
+                raise ValueError(f"Mes '{mes_comparable}' no reconocido. Usá un nombre completo (por ejemplo: 'Octubre').")
+
+            padron = padron.dropna(subset=['no', 'nombre', columna_mes])
+            padron['no'] = padron['no'].astype(int)
+            padron[columna_mes] = padron[columna_mes].str.upper()
+
+            df = pd.merge(df, padron[['no', columna_mes]], on='no', how='left')
+
+        # Exportar a CSV en memoria
+        try:
+            output = io.BytesIO()
+            df.to_csv(output, index=False, encoding='utf-16', decimal=',')
+            output.seek(0)
+            return output
+
+        except Exception as e:
+            return f'Ocurrió un error al generar el CSV. Detalle: {e}'
+
+    except Exception as e:
+        return f'No se logró lanzar la automatización. Detalle de Error: {e}'
