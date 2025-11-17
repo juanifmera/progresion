@@ -2448,9 +2448,6 @@ def analisis_horario_extendido(ventas_por_media_hora_arch, margen_arch, costo_ho
     except Exception as e:
         return f'Ocurrio un error a la hora de Generar el reporte para las tiendas con Horario Extendido de Express los dias Domingos. Detalle del Error: {e}'
 
-import pandas as pd
-import io
-
 def dia_de_semana(archivo_csv, mes_comparable, padron=None):
     '''
     Función para procesar un archivo CSV (de MicroStrategy) y devolver los días de semana, mes y año.
