@@ -1,6 +1,14 @@
+# --- CORE ---
 pandas
-streamlit_authenticator
-plotly
-chardet
+numpy
+pyarrow
+
+# --- STREAMLIT STACK ---
+streamlit
+streamlit-authenticator
+
+# --- UTILS ---
 openpyxl
 xlsxwriter
+plotly
+requests

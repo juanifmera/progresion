@@ -132,7 +132,7 @@ def progresiones_mmaa(volumen_y_ventas, debitos, padron, mes_comparable:str):
 
         # Trabajo sobre el padron
         # Selecciono las columnas que me sirven del padron
-        padron = padron[['N°', 'NOMBRE', 'Fecha apertura', 'ORGANIZACIÓN ', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']]
+        padron = padron[['GSX', 'NOMBRE', 'Fecha apertura', 'ORGANIZACIÓN ', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']]
 
         # Cambio de nombres en el padron
         padron.columns = (
@@ -148,7 +148,7 @@ def progresiones_mmaa(volumen_y_ventas, debitos, padron, mes_comparable:str):
         padron['fecha_apertura'] = padron['fecha_apertura'].dt.strftime('%d/%m/%Y')
 
         # Cambio el nombre de la columna N por "Numero Operacional"
-        padron.rename(columns={'n°':'numero_operacional'}, inplace=True)
+        padron.rename(columns={'gsx':'numero_operacional'}, inplace=True)
 
         # Quito los valores nulos utilizando como referencia la columna Numero Operacional, nombre y fecha apertura
         padron.dropna(subset=['numero_operacional', 'nombre', 'fecha_apertura', mes_comparable[0:3].lower()], how='any', inplace=True)
@@ -162,7 +162,6 @@ def progresiones_mmaa(volumen_y_ventas, debitos, padron, mes_comparable:str):
 
         # Coloco el numero operacional como numero
         padron['numero_operacional'] = padron['numero_operacional'].astype(int)
-
 
         # Concateno todos los df (venta, debito y volumen) y lo joineo con el padron
         df = pd.concat([ventas_agrupado, volumen_agrupado, debitos_agrupados])
@@ -460,7 +459,7 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
 
         # Trabajo sobre el padron
         # Selecciono las columnas que me sirven del padron
-        padron = padron[['N°', 'NOMBRE', 'Fecha apertura', 'ORGANIZACIÓN ', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']].copy() #type:ignore
+        padron = padron[['GSX', 'NOMBRE', 'Fecha apertura', 'ORGANIZACIÓN ', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']].copy() #type:ignore
 
         logger.debug(f"cargo el padron {padron.shape}")
 
@@ -478,7 +477,7 @@ def progresiones_acumulado(ventas, debitos, padron, mes_comparable:str):
         padron['fecha_apertura'] = padron['fecha_apertura'].dt.strftime('%d/%m/%Y')
 
         # Cambio el nombre de la columna N por "Numero Operacional"
-        padron.rename(columns={'n°':'numero_operacional'}, inplace=True)
+        padron.rename(columns={'gsx':'numero_operacional'}, inplace=True)
 
         # Quito los valores nulos utilizando como referencia la columna Numero Operacional, nombre y fecha apertura
         padron.dropna(subset=['numero_operacional', 'nombre', 'fecha_apertura', mes_comparable[0:3].lower()], how='any', inplace=True)
@@ -843,7 +842,7 @@ def genero_df_comparacion(ventas, debitos, padron, mes_comparable:str):
 
         # Trabajo sobre el padron
         # Selecciono las columnas que me sirven del padron
-        padron = padron[['N°', 'NOMBRE', 'Fecha apertura', 'ORGANIZACIÓN ', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']] #type:ignore
+        padron = padron[['GSX', 'NOMBRE', 'Fecha apertura', 'ORGANIZACIÓN ', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']] #type:ignore
 
         # Cambio de nombres en el padron
         padron.columns = (
@@ -859,7 +858,7 @@ def genero_df_comparacion(ventas, debitos, padron, mes_comparable:str):
         padron['fecha_apertura'] = padron['fecha_apertura'].dt.strftime('%d/%m/%Y')
 
         # Cambio el nombre de la columna N por "Numero Operacional"
-        padron.rename(columns={'n°':'numero_operacional'}, inplace=True)
+        padron.rename(columns={'gsx':'numero_operacional'}, inplace=True)
 
         # Quito los valores nulos utilizando como referencia la columna Numero Operacional, nombre y fecha apertura
         padron.dropna(subset=['numero_operacional', 'nombre', 'fecha_apertura', mes_comparable[0:3].lower()], how='any', inplace=True)
@@ -1065,7 +1064,7 @@ def obtener_join_comparable(ventas, debitos, padron, mes_comparable:str):
 
         # Trabajo sobre el padron
         # Selecciono las columnas que me sirven del padron
-        padron = padron[['N°', 'NOMBRE', 'Fecha apertura', 'ORGANIZACIÓN ', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']] #type:ignore
+        padron = padron[['GSX', 'NOMBRE', 'Fecha apertura', 'ORGANIZACIÓN ', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']] #type:ignore
 
         # Cambio de nombres en el padron
         padron.columns = (
@@ -1081,7 +1080,7 @@ def obtener_join_comparable(ventas, debitos, padron, mes_comparable:str):
         padron['fecha_apertura'] = padron['fecha_apertura'].dt.strftime('%d/%m/%Y')
 
         # Cambio el nombre de la columna N por "Numero Operacional"
-        padron.rename(columns={'n°':'numero_operacional'}, inplace=True)
+        padron.rename(columns={'gsx':'numero_operacional'}, inplace=True)
 
         # Quito los valores nulos utilizando como referencia la columna Numero Operacional, nombre y fecha apertura
         padron.dropna(subset=['numero_operacional', 'nombre', 'fecha_apertura', mes_comparable[0:3].lower()], how='any', inplace=True)
@@ -1213,7 +1212,7 @@ def obtener_join_no_comparable(ventas, debitos, padron, mes_comparable:str):
 
         # Trabajo sobre el padron
         # Selecciono las columnas que me sirven del padron
-        padron = padron[['N°', 'NOMBRE', 'Fecha apertura', 'ORGANIZACIÓN ', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']] #type:ignore
+        padron = padron[['GSX', 'NOMBRE', 'Fecha apertura', 'ORGANIZACIÓN ', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']] #type:ignore
 
         # Cambio de nombres en el padron
         padron.columns = (
@@ -1229,7 +1228,7 @@ def obtener_join_no_comparable(ventas, debitos, padron, mes_comparable:str):
         padron['fecha_apertura'] = padron['fecha_apertura'].dt.strftime('%d/%m/%Y')
 
         # Cambio el nombre de la columna N por "Numero Operacional"
-        padron.rename(columns={'n°':'numero_operacional'}, inplace=True)
+        padron.rename(columns={'gsx':'numero_operacional'}, inplace=True)
 
         # Quito los valores nulos utilizando como referencia la columna Numero Operacional, nombre y fecha apertura
         padron.dropna(subset=['numero_operacional', 'nombre', 'fecha_apertura', mes_comparable[0:3].lower()], how='any', inplace=True)
@@ -1402,7 +1401,7 @@ def progresiones_acumulado_csv(ventas, debitos, padron, mes_comparable:str):
 
         # Trabajo sobre el padron
         # Selecciono las columnas que me sirven del padron
-        padron = padron[['N°', 'NOMBRE', 'Fecha apertura', 'ORGANIZACIÓN ', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']].copy() #type:ignore
+        padron = padron[['GSX', 'NOMBRE', 'Fecha apertura', 'ORGANIZACIÓN ', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']].copy() #type:ignore
 
         logger.debug(f"cargo el padron {padron.shape}")
 
@@ -1420,7 +1419,7 @@ def progresiones_acumulado_csv(ventas, debitos, padron, mes_comparable:str):
         padron['fecha_apertura'] = padron['fecha_apertura'].dt.strftime('%d/%m/%Y')
 
         # Cambio el nombre de la columna N por "Numero Operacional"
-        padron.rename(columns={'n°':'numero_operacional'}, inplace=True)
+        padron.rename(columns={'gsx':'numero_operacional'}, inplace=True)
 
         # Quito los valores nulos utilizando como referencia la columna Numero Operacional, nombre y fecha apertura
         padron.dropna(subset=['numero_operacional', 'nombre', 'fecha_apertura', mes_comparable[0:3].lower()], how='any', inplace=True)
@@ -1776,7 +1775,7 @@ def briefing(ventas_y_volumen_por_tienda, debitos_por_tienda, padron, debitos_po
 
         # Cargo y trabajo sobre el PADRON
         # Cargo unicamente las columnas que me van a servir
-        cols = ['N°', 'NOMBRE', 'Fecha apertura', 'BANDERA', 'ORGANIZACIÓN ', 'PROVINCIA', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']
+        cols = ['GSX', 'NOMBRE', 'Fecha apertura', 'BANDERA', 'ORGANIZACIÓN ', 'PROVINCIA', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']
 
         # Leo el Padron
         try:
@@ -1807,7 +1806,7 @@ def briefing(ventas_y_volumen_por_tienda, debitos_por_tienda, padron, debitos_po
             raise ValueError(f"Mes '{mes_comparable}' no reconocido. Usá un nombre completo (por ejemplo: 'Octubre').")
         
         # Renombro algunas columnas para que tengan mas sentido
-        padron = padron.rename(columns={'n°':'numero_operacional'})
+        padron = padron.rename(columns={'gsx':'numero_operacional'})
 
         # Elimino las filas que tengan NA en su numero, nombre o mes comparable
         padron = padron.dropna(subset=['numero_operacional', 'nombre', columna_mes], how='any')
@@ -2499,14 +2498,14 @@ def dia_de_semana(archivo_csv, mes_comparable, padron=None):
             df['no'] = df['Punto operacional'].str.split(' ').str[0].astype(int)
 
             try:
-                cols = ['N°', 'NOMBRE', 'Fecha apertura', 'BANDERA', 'ORGANIZACIÓN ', 'PROVINCIA', 'FIN DE CIERRE',
+                cols = ['GSX', 'NOMBRE', 'Fecha apertura', 'BANDERA', 'ORGANIZACIÓN ', 'PROVINCIA', 'FIN DE CIERRE',
                         'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']
                 padron = pd.read_excel(padron, header=17, usecols=cols)
             except Exception as e:
                 return f'Error a la hora de cargar el Padrón. ERROR: {e}'
 
             padron.columns = padron.columns.str.lower().str.strip().str.replace(' ', '_').str.replace('.2', '')
-            padron = padron.rename(columns={'n°': 'no'})
+            padron = padron.rename(columns={'gsx': 'no'})
 
             meses_dict = {
                 'enero': 'ene', 'febrero': 'feb', 'marzo': 'mar', 'abril': 'abr',
