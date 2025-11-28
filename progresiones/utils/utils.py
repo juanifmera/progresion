@@ -8,6 +8,9 @@ import streamlit as st
 import logging
 import zipfile
 import numpy as np
+from bq_carrefour import MethodBQ
+from google.cloud import bigquery
+from google.api_core.exceptions import NotFound
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -2536,7 +2539,7 @@ def dia_de_semana(archivo_csv, mes_comparable, padron=None):
     except Exception as e:
         return f'No se logró lanzar la automatización. Detalle de Error: {e}'
 
-def marketshare(marketshare_data, padron_data):
+def marketshare(marketshare_data):
     '''
     Funcion para refrescar la informacion de la tabla "MarketShare" en GCP. Esta tabla alimenta el tablero de Marketshare publicao y en produccion de Control de Gestion
 
@@ -2545,206 +2548,245 @@ def marketshare(marketshare_data, padron_data):
 
     2- padron_data --> Archivo actualizado del padron con la ultima informacion. (Atento a este punto ya que puede sufrir modificaciones el padron y romper la Pipeline. La ultima modificacion que se le hizo al padron fue el cambio de nombre de una columna N° por GSX)
     '''
-
-    # Cargo la Info del Share
     try:
-        df = pd.read_excel(marketshare_data)
+        # Cargo la Info del Share
+        try:
+            df = pd.read_excel(marketshare_data)
+
+        except Exception as e:
+            return f'Error al cargar la informacion del Share. Detalle: {e}'
+
+        # Comienzo a trabajar sobre los cambios en el archivo del Share
+        # Genero un bucle para convertir los nombres de las columnas y que tengan mas sentido. Si la columna es datetime, entonces se obtiene el nombre del mes (En ingles) y se lo coloca como nuevo nombre concatenado con su año
+        for col in df.columns:
+
+            if isinstance(col, datetime):
+                month = col.strftime('%B')
+                year = col.year
+                new_name = f'{month.lower()} {year}'
+                df = df.rename(columns={col:str(new_name)})
+
+            else:
+                new_name = col.lower()
+                df = df.rename(columns={col:new_name})
+
+        # Trabajo sobre el numero Operacional
+        df['succad'] = df['succad'].replace(np.nan, 0)
+        df['succad'] = df['succad'].astype(int)
+        df['succad'] = df['succad'].replace(0, 'RESTO')
+
+            # Renombro columnas
+        df = df.rename(columns=
+            {
+            'area1_rs':'area',
+            'area_scentia_rs':'region',
+            'mercado reporte':'subregion',
+            'formato_m2_rs':'formato_m2',
+            'mdo carrefour':'marca',
+            'bandera carrefour':'formato',
+            'succad':'numero_operacional'
+            }
+        )
+
+        # Doy formato y estandarizo los rangos de superficie
+        df['formato_m2'] = df['formato_m2'].str.split('-', n=1).str[1].str.replace('-', 'a')
+
+        # Genero diccionario Auxiliar con los meses en ingles y castellano
+        meses_en = {
+        'january': 'enero',
+        'february': 'febrero',
+        'march': 'marzo',
+        'april': 'abril',
+        'may': 'mayo',
+        'june': 'junio',
+        'july': 'julio',
+        'august': 'agosto',
+        'september': 'septiembre',
+        'october': 'octubre',
+        'november': 'noviembre',
+        'december': 'diciembre'
+        }
+        # Almaceno los nuevos nombres de las columnas
+        nuevo_nombre_cols = {}
+
+        for col in df.columns:
+            partes = col.lower().split(' ', 1)
+            if partes[0] in meses_en:
+                nuevo_nombre = f"{meses_en[partes[0]]} {partes[1]}"
+                nuevo_nombre_cols[col] = nuevo_nombre
+
+        # Cambio los nombres viejos por los nuevos
+        df = df.rename(columns=nuevo_nombre_cols)
+
+        # Saco columnas innecesarias
+        df = df.drop(columns=['ytd24', 'ytd25'])
+
+        # PASO CRITICO / DERRITO EL DF PARA TENER EL DATO DE LAS FECHAS COMO VARIABLE CATEGORICA Y PASAR DE UN FORMATO WIDE A LONG
+        df = df.melt(id_vars=['area', 'region', 'subregion', 'formato_m2', 'marca', 'formato', 'numero_operacional'], var_name='fecha', value_name='ventas_con_tasa')
+
+        # Genero columnas
+        df['mes'] = df['fecha'].str.split(' ').str[0]
+        df['año'] = df['fecha'].str.split(' ').str[1]
+
+        # Ordeno el DF
+        df = df[['area', 'region', 'subregion', 'formato_m2', 'marca', 'formato', 'numero_operacional', 'fecha', 'mes', 'año', 'ventas_con_tasa']]
+
+        # Me aseguro que la columna Num Op sea Numero
+        df['numero_operacional'] = df['numero_operacional'].astype(str)
+
+        # Me quedo unicamente con los registros que tienen Venta
+        df = df[df['ventas_con_tasa'] != 0]
+
+        # Quito valores nulos
+        df = df.dropna(axis=0, subset=['ventas_con_tasa'], how='any')
+
+        # Convierto las ventas en INT
+        df['ventas_con_tasa'] = df['ventas_con_tasa'].astype(int)
+
+        # Genero nuevas columnas
+        df['ventas_con_tasa_millones'] = df['ventas_con_tasa'] / 1_000_000
+        df['ventas_con_tasa_millones'] = df['ventas_con_tasa_millones'].astype(float).round(2)
+
+        # Estandarizo los formatos
+        df['formato'] = df['formato'].replace(
+            {
+            'CARREFOUR EXPRESS':'EXPRESS',
+            'CARREFOUR HIPER':'HIPER',
+            'CARREFOUR MARKET':'MARKET',
+            'CARREFOUR MAXI':'MAXI'
+            }
+        )
+
+        # Diccionario Auxiliar para generar una columna de "fecha_parsed"
+        meses_a_numero = {
+            'enero': '01',
+            'febrero': '02',
+            'marzo': '03',
+            'abril': '04',
+            'mayo': '05',
+            'junio': '06',
+            'julio': '07',
+            'agosto': '08',
+            'septiembre': '09',
+            'octubre': '10',
+            'noviembre': '11',
+            'diciembre': '12'
+        }
+
+        # Genero columnas auxiliares para generar una columna Datetime
+        df['numero_mes'] = df['mes'].map(meses_a_numero)
+        df['fecha_parsed'] = df['numero_mes'] + '/' + '01/' + df['año']
+        df['fecha_final'] = pd.to_datetime(df['fecha_parsed'])
+
+        # Elimino las columnas auxiliares
+        df = df.drop(columns=['numero_mes', 'fecha_parsed', 'fecha'])
+
+        # Genero una variable que capture la fecha en la cual se ejecuta el flujo. Obtengo los datos de la fecha, extraigo el año y el mes. Al mes le resto uno, para obtener el mes "Vencido" y asi generar una fecha que me serivirá para filtrar unicamente la informacion del mes vencido para concatenarla al historico que ya esta subido a GCP
+        fecha_actual = pd.to_datetime(datetime.today().date())
+        fecha_aux = str(fecha_actual.year) + '/' + str(fecha_actual.month - 1) + '/' + '01'
+        fecha_comparable = pd.to_datetime(fecha_aux, format='%Y/%m/%d')
+        
+        # Filtro la informacion y me quedo unicamente con la informacion del mes que voy a concatenar al Historico
+        df = df[df['fecha_final'] == fecha_comparable]
+
+        return df
 
     except Exception as e:
-        return f'Error al cargar la informacion del Share. Detalle: {e}'
+        return f'Hubo un error al intentar transformar la informacion del Marketshare. Detalle de error: {e}'    
 
-    # Cargo la Informacion del padron
+def padron_marketshare(padron_data):
+    '''
+    Funcion para normalizar el padron y dejarlo Limpio y operativo
+    '''
     try:
-        # Indico que columnas voy a necesitar
-        cols = ['GSX', 'NOMBRE', 'Fecha apertura', 'FIN DE CIERRE','ORGANIZACIÓN ', 'DIRECTOR EXPLOTACIÓN', 'DIRECTOR OPERACIONAL', 'DIRECTOR / GERENTE REGIONAL', 'SUB REGION', 'DIRECTOR/ GERENTE TIENDA', 'Provincia Tableau', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'CAJAS', 'COD.POSTAL']
-        pad = pd.read_excel(padron_data, header=17, usecols=cols)
+        ### COMIENZO A TRABAJAR SOBRE EL PADRON ###
+            # Cargo la Informacion del padron
+        try:
+            # Indico que columnas voy a necesitar
+            cols = ['GSX', 'NOMBRE', 'Fecha apertura', 'FIN DE CIERRE','ORGANIZACIÓN ', 'DIRECTOR EXPLOTACIÓN', 'DIRECTOR OPERACIONAL', 'DIRECTOR / GERENTE REGIONAL', 'SUB REGION', 'DIRECTOR/ GERENTE TIENDA', 'Provincia Tableau', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'CAJAS', 'COD.POSTAL']
+            pad = pd.read_excel(padron_data, header=17, usecols=cols)
 
-    except Exception as e:
-        return f'Error a la hora de cargar el Padron. Detalle {e}'
+        except Exception as e:
+            return f'Error a la hora de cargar el Padron. Detalle {e}'
 
-    # Comienzo a trabajar sobre los cambios en el archivo del Share
-    # Genero un bucle para convertir los nombres de las columnas y que tengan mas sentido. Si la columna es datetime, entonces se obtiene el nombre del mes (En ingles) y se lo coloca como nuevo nombre concatenado con su año
-    for col in df.columns:
+        # Estandarizo un poco los nombres de las columnas
+        pad.columns = pad.columns.str.strip().str.lower().str.replace(' /', '').str.replace('/', '').str.replace('.', ' ')
 
-        if isinstance(col, datetime):
-            month = col.strftime('%B')
-            year = col.year
-            new_name = f'{month.lower()} {year}'
-            df = df.rename(columns={col:str(new_name)})
+        # Quito nulos
+        pad = pad.dropna(subset=['nombre', 'organización', 'fecha apertura'])
 
-        else:
-            new_name = col.lower()
-            df = df.rename(columns={col:new_name})
+        # Me quedo unicamente con formatos validos
+        pad = pad[pad['organización'].isin(['HIPERMERCADO', 'MAXI', 'Market', 'Express'])]
 
-    # Trabajo sobre el numero Operacional
-    df['succad'] = df['succad'].replace(np.nan, 0)
-    df['succad'] = df['succad'].astype(int)
-    df['succad'] = df['succad'].replace(0, 'RESTO')
+        # Me quedo con valores que no hayan cerrado
+        pad = pad[pad['fin de cierre'] == '-']
 
-        # Renombro columnas
-    df = df.rename(columns=
-        {
-        'area1_rs':'area',
-        'area_scentia_rs':'region',
-        'mercado reporte':'subregion',
-        'formato_m2_rs':'formato_m2',
-        'mdo carrefour':'marca',
-        'bandera carrefour':'formato',
-        'succad':'numero_operacional'
-        }
-    )
+        # Quito columna incompleta
+        pad = pad.drop(columns={'provincia tableau'})
 
-    # Doy formato y estandarizo los rangos de superficie
-    df['formato_m2'] = df['formato_m2'].str.split('-', n=1).str[1].str.replace('-', 'a')
+        # Renombro la columna completa de provincias
+        pad = pad.rename(columns={
+            'provincia':'provincia tableau',
+            'gsx':'id tienda'
+        })
 
-    # Genero diccionario Auxiliar con los meses en ingles y castellano
-    meses_en = {
-    'january': 'enero',
-    'february': 'febrero',
-    'march': 'marzo',
-    'april': 'abril',
-    'may': 'mayo',
-    'june': 'junio',
-    'july': 'julio',
-    'august': 'agosto',
-    'september': 'septiembre',
-    'october': 'octubre',
-    'november': 'noviembre',
-    'december': 'diciembre'
-    }
-    # Almaceno los nuevos nombres de las columnas
-    nuevo_nombre_cols = {}
+        # Genero un list aux para bucle abajo
+        cols = ['m² pgc', 'm² pft', 'm² bazar', 'm² electro', 'm² textil', 'm² pls', 'm² galerias', 'cajas', 'm² parcking']
 
-    for col in df.columns:
-        partes = col.lower().split(' ', 1)
-        if partes[0] in meses_en:
-            nuevo_nombre = f"{meses_en[partes[0]]} {partes[1]}"
-            nuevo_nombre_cols[col] = nuevo_nombre
+        # Itero sobre cols para estandarizar, rellenar y limpiar nulos
+        for col in cols:
+            pad[col] = pad[col].fillna(0).replace('-', 0).replace('sd', 0).replace('SD', 0).replace('', 0).astype(int)
 
-    # Cambio los nombres viejos por los nuevos
-    df = df.rename(columns=nuevo_nombre_cols)
+        # Ordeno columnas
+        pad = pad[['nombre', 'id tienda', 'organización', 'director explotación', 'director operacional', 'director gerente regional', 'sub region', 'director gerente tienda', 'provincia tableau', 'm² salón', 'm² pgc', 'm² pft', 'm² bazar', 'm² electro', 'm² textil', 'm² pls', 'm² galerias', 'cod postal', 'cajas', 'm² parcking']]
 
-    # Saco columnas innecesarias
-    df = df.drop(columns=['ytd24', 'ytd25'])
+        # Convierto el codigo postal a String ya que es alfanumerico
+        pad['cod postal'] = pad['cod postal'].astype(str)
 
-    # PASO CRITICO / DERRITO EL DF PARA TENER EL DATO DE LAS FECHAS COMO VARIABLE CATEGORICA Y PASAR DE UN FORMATO WIDE A LONG
-    df = df.melt(id_vars=['area', 'region', 'subregion', 'formato_m2', 'marca', 'formato', 'numero_operacional'], var_name='fecha', value_name='ventas_con_tasa')
+        # Genero una nueva columna para identificar la ultima fecha de actualizacion de las tiendas
+        pad['modificacion'] = datetime.today().strftime('%d/%m/%Y')
 
-    # Genero columnas
-    df['mes'] = df['fecha'].str.split(' ').str[0]
-    df['año'] = df['fecha'].str.split(' ').str[1]
+        # Formateo la fecha y la convierto a String. Como no es util para comprar o utilizar en series de tiempo, sirve igual
+        pad['modificacion'] = pad['modificacion'].astype('str')
 
-    # Ordeno el DF
-    df = df[['area', 'region', 'subregion', 'formato_m2', 'marca', 'formato', 'numero_operacional', 'fecha', 'mes', 'año', 'ventas_con_tasa']]
+        # Reseteo y quito Indice indeseado
+        pad = pad.reset_index(drop=True)
 
-    # Me aseguro que la columna Num Op sea Numero
-    df['numero_operacional'] = df['numero_operacional'].astype(str)
-
-    # Me quedo unicamente con los registros que tienen Venta
-    df = df[df['ventas_con_tasa'] != 0]
-
-    # Quito valores nulos
-    df = df.dropna(axis=0, subset=['ventas_con_tasa'], how='any')
-
-    # Convierto las ventas en INT
-    df['ventas_con_tasa'] = df['ventas_con_tasa'].astype(int)
-
-    # Genero nuevas columnas
-    df['ventas_con_tasa_millones'] = df['ventas_con_tasa'] / 1_000_000
-    df['ventas_con_tasa_millones'] = df['ventas_con_tasa_millones'].astype(float).round(2)
-
-    # Estandarizo los formatos
-    df['formato'] = df['formato'].replace(
-        {
-        'CARREFOUR EXPRESS':'EXPRESS',
-        'CARREFOUR HIPER':'HIPER',
-        'CARREFOUR MARKET':'MARKET',
-        'CARREFOUR MAXI':'MAXI'
-        }
-    )
-
-    # Diccionario Auxiliar para generar una columna de "fecha_parsed"
-    meses_a_numero = {
-        'enero': '01',
-        'febrero': '02',
-        'marzo': '03',
-        'abril': '04',
-        'mayo': '05',
-        'junio': '06',
-        'julio': '07',
-        'agosto': '08',
-        'septiembre': '09',
-        'octubre': '10',
-        'noviembre': '11',
-        'diciembre': '12'
-    }
-
-    # Genero columnas auxiliares para generar una columna Datetime
-    df['numero_mes'] = df['mes'].map(meses_a_numero)
-    df['fecha_parsed'] = df['numero_mes'] + '/' + '01/' + df['año']
-    df['fecha_final'] = pd.to_datetime(df['fecha_parsed'])
-
-    # Elimino las columnas auxiliares
-    df = df.drop(columns=['numero_mes', 'fecha_parsed', 'fecha'])
-
-    # Genero una variable que capture la fecha en la cual se ejecuta el flujo. Obtengo los datos de la fecha, extraigo el año y el mes. Al mes le resto uno, para obtener el mes "Vencido" y asi generar una fecha que me serivirá para filtrar unicamente la informacion del mes vencido para concatenarla al historico que ya esta subido a GCP
-    fecha_actual = pd.to_datetime(datetime.today().date())
-    fecha_aux = str(fecha_actual.year) + '/' + str(fecha_actual.month - 1) + '/' + '01'
-    fecha_comparable = pd.to_datetime(fecha_aux, format='%Y/%m/%d')
+        return pad
     
-    # Filtro la informacion y me quedo unicamente con la informacion del mes que voy a concatenar al Historico
-    df = df[df['fecha_final'] == fecha_comparable]
+    except Exception as e:
+        return f'Ocurrio un error al intentar correr funcion para transformar padron. Detalle de error {e}'
 
-    ### COMIENZO A TRABAJAR SOBRE EL PADRON ###
-    # Estandarizo un poco los nombres de las columnas
-    pad.columns = pad.columns.str.strip().str.lower().str.replace(' /', '').str.replace('/', '').str.replace('.', ' ')
+def crear_tabla_si_no_existe(df: pd.DataFrame, table_id: str, project_id: str):
+    client = bigquery.Client(project=project_id)
 
-    # Quito nulos
-    pad = pad.dropna(subset=['nombre', 'organización', 'fecha apertura'])
+    try:
+        client.get_table(table_id)
+        print(f"✅ La tabla {table_id} ya existe")
+    except NotFound:
+        print(f"⚠️ La tabla {table_id} no existe. Creándola...")
 
-    # Me quedo unicamente con formatos validos
-    pad = pad[pad['organización'].isin(['HIPERMERCADO', 'MAXI', 'Market', 'Express'])]
+        job_config = bigquery.LoadJobConfig(
+            write_disposition="WRITE_EMPTY"
+        )
 
-    # Me quedo con valores que no hayan cerrado
-    pad = pad[pad['fin de cierre'] == '-']
+        load_job = client.load_table_from_dataframe(
+            dataframe=df,
+            destination=table_id,
+            job_config=job_config
+        )
 
-    # Quito columna incompleta
-    pad = pad.drop(columns={'provincia tableau'})
-
-    # Renombro la columna completa de provincias
-    pad = pad.rename(columns={
-        'provincia':'provincia tableau',
-        'gsx':'id tienda'
-    })
-
-    # Genero un list aux para bucle abajo
-    cols = ['m² pgc', 'm² pft', 'm² bazar', 'm² electro', 'm² textil', 'm² pls', 'm² galerias', 'cajas', 'm² parcking']
-
-    # Itero sobre cols para estandarizar, rellenar y limpiar nulos
-    for col in cols:
-        pad[col] = pad[col].fillna(0).replace('-', 0).replace('sd', 0).replace('SD', 0).replace('', 0).astype(int)
-
-    # Ordeno columnas
-    pad = pad[['nombre', 'id tienda', 'organización', 'director explotación', 'director operacional', 'director gerente regional', 'sub region', 'director gerente tienda', 'provincia tableau', 'm² salón', 'm² pgc', 'm² pft', 'm² bazar', 'm² electro', 'm² textil', 'm² pls', 'm² galerias', 'cod postal', 'cajas', 'm² parcking']]
-
-    # Convierto el codigo postal a String ya que es alfanumerico
-    pad['cod postal'] = pad['cod postal'].astype(str)
-
-    # Genero una nueva columna para identificar la ultima fecha de actualizacion de las tiendas
-    pad['modificacion'] = datetime.today().strftime('%d/%m/%Y')
-
-    # Formateo la fecha y la convierto a String. Como no es util para comprar o utilizar en series de tiempo, sirve igual
-    pad['modificacion'] = pad['modificacion'].astype('str')
-
-    # Reseteo y quito Indice indeseado
-    pad = pad.reset_index(drop=True)
+        load_job.result()
+        print(f"✅ Tabla {table_id} creada correctamente.")
 
 def carga_padron(padron, project_id='gcp-ar-cdg-datos-dev', table_id='gcp-ar-cdg-datos-dev.marketshare_project.padron'):
-    '''
-    Funcion para cargar el padron luego de ver que este bien 
-    '''
     try:
+        # Paso previo: crear tabla si no existe
+        crear_tabla_si_no_existe(padron, table_id, project_id)
+
+        # Ahora sí: usar MethodBQ normalmente
         bq_methods = MethodBQ(project=project_id)
+        
         bq_methods.upsert_df_to_bigquery(
             df=padron,
             table_id=table_id,
@@ -2752,10 +2794,12 @@ def carga_padron(padron, project_id='gcp-ar-cdg-datos-dev', table_id='gcp-ar-cdg
             primary_keys=['id tienda']
         )
 
-    except Exception as e:
-        return f'Hubo un error al intentar subir el padron a GCP. Detalle {e}'
+        return 'Exito al cargar la información del padrón a GCP'
 
-def carga_share(share_data,project_id='gcp-ar-cdg-datos-dev', table_id='gcp-ar-cdg-datos-dev.marketshare_project.marketshare_data'):
+    except Exception as e:
+        return f'Error al subir el padrón a GCP: {e}'
+
+def carga_share(share_data, project_id='gcp-ar-cdg-datos-dev', table_id='gcp-ar-cdg-datos-dev.marketshare_project.marketshare_data'):
     try:
         bq_methods = MethodBQ(project=project_id)
         bq_methods.upsert_df_to_bigquery(
@@ -2763,6 +2807,8 @@ def carga_share(share_data,project_id='gcp-ar-cdg-datos-dev', table_id='gcp-ar-c
             table_id=table_id, 
             mode='append'
         )
+
+        return 'Exito al cargar la informacion de Market Share a GCP'
         
     except Exception as e:
-        return f'Hubo un error al intentar subir la nueva informacion de Share a GCP'    
+        return f'Error al intentar subir la nueva informacion de Share a GCP. Detalle {e}'    

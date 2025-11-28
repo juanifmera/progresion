@@ -12,3 +12,4 @@ openpyxl
 xlsxwriter
 plotly
 requests
+chardet
