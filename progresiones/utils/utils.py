@@ -2190,20 +2190,20 @@ def analisis_horario_extendido(ventas_por_media_hora_arch, margen_arch, costo_ho
         ### COMIENZO IMPORTANDO EL REPORTE DE VENTAS, LO TRANSFORMO Y LE AGREGO INFORMACION NECESARIA PARA OBTENER EL DIA DE LA SEMANA, ETC. ###
 
         # Cargo la Informacion de Ventas Historico en Formato Long
-        df = pd.read_csv(ventas_por_media_hora_arch, encoding='utf-16', header=2)
+        df = pd.read_csv(ventas_por_media_hora_arch, encoding='utf-16', header=1)
         # Genero Copia del DF
         df = df.copy()
-        # Genero un Slicing
+        # Genero un Slicing para obtener los valores correctos de las columnas al ser el df un Multiindex
         df = df[1:]
-        # Renombro algunas columnas para trabajar mas comodod
-        df = df.rename(columns={
-            ' ':'año',
-            ' .2':'fecha',
-            ' .3':'hora'
-        })
+        # Normalizo los nombres de las columnas
+        df.columns = df.columns.str.strip().str.lower()
+        # Renombro las columnas
+        df = df.rename(columns={'dia':'fecha', 'media hora':'hora'})
         # Elimino aquellas columnas que molestan
-        df = df.drop(columns=[c for c in [' .1', 'Punto Operacional'] if c in df.columns])
-        # Derrito el df para trabajar en forto "Wide"
+        df = df.drop(columns=[c for c in ['total', 'direccion', 'mes', 'punto operacional'] if c in df.columns])
+        # Saco los todales de las columnas e Indice
+        df = df[df['año'] != 'Total']
+        # Derrito el df para trabajar en forto "LONG"
         df = df.melt(id_vars=['año', 'fecha', 'hora'], var_name='tiendas', value_name='vct').dropna(subset=['vct'])
         # Hago un reset Index y elimino el anterior que no estaba ordenado
         df = df.reset_index().drop(columns=['index'])
@@ -2243,7 +2243,6 @@ def analisis_horario_extendido(ventas_por_media_hora_arch, margen_arch, costo_ho
         df_domingos['hora_inicio'] = df_domingos['hora'].str.extract(r'Desde (\d{2}:\d{2})')[0]
         # Convertimos a objeto time
         df_domingos['hora_inicio'] = pd.to_datetime(df_domingos['hora_inicio'], format='%H:%M').dt.time
-
         ### CARGO Y TRABAJO SOBRE EL DETALLE DE COSTO HORAS HOMBRE ###
         costo_horas_hombre = pd.read_excel(costo_horas_hombre_arch, sheet_name='costo_ho')
         # Elimino las columnas que estan en Nulo

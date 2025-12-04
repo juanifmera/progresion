@@ -14,6 +14,27 @@ st.markdown(
     'El proceso combina la información de **Ventas por Media Hora**, **Margen**, **Costo de Hora Hombre** y **Horas Autorizadas**, para calcular el **ROC estimado** del horario extendido y determinar su rentabilidad.'
 )
 
+with st.expander('¡¡¡Revisar Informacion Importante!!!'):
+    st.code('''
+    1- Colocar archivo de Ventas por Media Hora de Express (CSV).
+        a- Tener en cuenta que el rango de fechas debera comenzar desde Abril 2025 hasta el mes corriente de analisis.
+        b- El archivo al contener tanta informacion, este tendra un formato "LONG". Si se descarga el informe directamente desde Micro Strategy, asegurarse de quitar la columna "HORA" de la cuadricula, ya que no se necesita.
+        c- El Informe se llama "22b. Analisis de Vtas por punto/Seccion/dia/hora (tomadad de 30 min)".
+        d- Una vez dentro del reporte colocar los filtros de Año, Mes, Dia, Direccion, Punto Operacional, listar los sectores PGC, PFT, Electro, Textil, Bazar, Otros dentro de Estructura Comercial, Filtrar unicamente las tiendas de Express y Seleccionar el rango de fechas adecuadas desde Abril 2025 hasta el mes corriente que se este haciendo el analisis.
+
+    2- Descargar y colocar el archivo de Margen desde el Tablero de descarga de Margen.
+        a- La hoja se llama "TABLERO DESCARGA MARGEN". 
+        b- Se deberan utilizar los filtros para reducir el rango del periodo desde Abril 2025 en adelante al mes corriente, el filtro de formato para obtener solamente la informacion de EXPRESS.
+        c- Se deberan agrupar las columnas de la tabla para unicamente obtener el detalle cerrado de del rubro. Asimismo, se debera expandir el detalle de la columna formato para obtener el detalle de las tiendas. De esta forma se obtendrá un archivo con la columna del Periodo, Formato, Tienda, Rubro Concat (Grupo) 1, Total Sector e Importe ARS.
+        d- Por ultimo y mas importante, para descargar el informe, NO SE DEBE HACER DESDE EL BOTON "Descarga" de la pantalla principal, ya que si lo hacemos por este boton, la columna de valores se exporta sin titulo. Para descargar el margen de forma correcta, se debe ir a la parte superior derecha de Tableau, apretar el icono que parece una pantalla con una flecha hacia abajo, y una vez abierta la pantall de descarga, arriba a la derecha apretar "descargar".
+
+    3- Descargar y colocar el Costo de Horas Hombre y las horas Autorizadas
+        a- El detalle de Costo Horas Hombre y Horas Autorizadas Domingo se lo tiene que pedir a Belu o Sebas de Gasto de Personal.
+        b- Generado en el drive de Control de Gestion hay una carpeta llamada "23 - Horas Autorizadas y Costo Horas Hombre", alli se encontrara un archivo que contiene toda la informacion necesaria para completar el analisis.
+        c- La aplicacion detecta automaticamente de que Hoja extrar la informacion para cada Uploader. Solamente se tiene que asegurar que este completa la columna del mes que se quiere anlizar.
+        d- Descargar archivo e incluir el mismo archivo a los dos espacios reservados para cargar las horas autorizadas y el costo de hora hombre.
+    ''')
+
 st.subheader('Primeros Pasos', divider='rainbow')
 
 col1, col2 = st.columns(2)
