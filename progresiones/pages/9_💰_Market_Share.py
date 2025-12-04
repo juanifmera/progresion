@@ -40,8 +40,15 @@ with st.expander("¡¡¡Revisar información importante!!!"):
 
 2. Padrón
     - Confirmar que esté actualizado. No se necesita hacer limpieza previa.
+
+3. Reiniciar
+    - En caso de querer reiniciar el proceso de cero, aseguresé de apretar el boton debajo para limpiar los 'session state' de streamlit.
 '''
     )
+    # Botón opcional para reiniciar todo
+    if st.button("🔁 Reiniciar Proceso", width='stretch', type='secondary'):
+        st.session_state.clear()
+        st.rerun()
 
 col1, col2 = st.columns(2)
 
@@ -105,7 +112,7 @@ if st.session_state["datos_transformados"]:
     st.subheader("Paso 3 - Subida Final a GCP", divider="rainbow")
     st.markdown("Si los datos previsualizados son correctos, podés subirlos a BigQuery.")
 
-    if st.button("🚀 Subir a BigQuery", width='stretch'):
+    if st.button("🚀 Subir a BigQuery", width='stretch', type='primary'):
         with st.spinner("Subiendo a GCP..."):
             resultado_padron_gcp = carga_padron(padron=resultado_padron)
             resultado_share_gcp = carga_share(share_data=resultado_marketshare)
@@ -119,8 +126,3 @@ if st.session_state["datos_transformados"]:
             st.error(f"📊 Market Share: {resultado_share_gcp}")
         else:
             st.success(f"📊 Market Share: {resultado_share_gcp}")
-
-    # Botón opcional para reiniciar todo
-    if st.button("🔁 Reiniciar Proceso"):
-        st.session_state.clear()
-        st.rerun()
