@@ -2698,12 +2698,14 @@ def padron_marketshare(padron_data):
     Funcion para normalizar el padron y dejarlo Limpio y operativo
     '''
     try:
-        ### COMIENZO A TRABAJAR SOBRE EL PADRON ###
-            # Cargo la Informacion del padron
+
         try:
+            ### COMIENZO A TRABAJAR SOBRE EL PADRON ###
+            # Cargo la Informacion del padron
+
             # Indico que columnas voy a necesitar
             cols = ['GSX', 'NOMBRE', 'Fecha apertura', 'FIN DE CIERRE','ORGANIZACIÓN ', 'DIRECTOR EXPLOTACIÓN', 'DIRECTOR OPERACIONAL', 'DIRECTOR / GERENTE REGIONAL', 'SUB REGION', 'DIRECTOR/ GERENTE TIENDA', 'Provincia Tableau', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'CAJAS', 'COD.POSTAL']
-            pad = pd.read_excel(padron_data, header=17, usecols=cols)
+            pad = pd.read_excel('data/padron.xlsx', header=17, usecols=cols)
 
         except Exception as e:
             return f'Error a la hora de cargar el Padron. Detalle {e}'
@@ -2715,10 +2717,10 @@ def padron_marketshare(padron_data):
         pad = pad.dropna(subset=['nombre', 'organización', 'fecha apertura'])
 
         # Me quedo unicamente con formatos validos
-        pad = pad[pad['organización'].isin(['HIPERMERCADO', 'MAXI', 'Market', 'Express'])]
+        pad = pad[pad['organización'].isin(['HIPERMERCADO', 'MAXI', 'Market', 'Express', 'E-Commerce'])]
 
-        # Me quedo con valores que no hayan cerrado
-        pad = pad[pad['fin de cierre'] == '-']
+        # Genero una columna de Estado
+        pad['estado'] = np.where(pad['fin de cierre'] == '-', 'Activa', 'Cerrada')
 
         # Quito columna incompleta
         pad = pad.drop(columns={'provincia tableau'})
@@ -2737,10 +2739,12 @@ def padron_marketshare(padron_data):
             pad[col] = pad[col].fillna(0).replace('-', 0).replace('sd', 0).replace('SD', 0).replace('', 0).astype(int)
 
         # Ordeno columnas
-        pad = pad[['nombre', 'id tienda', 'organización', 'director explotación', 'director operacional', 'director gerente regional', 'sub region', 'director gerente tienda', 'provincia tableau', 'm² salón', 'm² pgc', 'm² pft', 'm² bazar', 'm² electro', 'm² textil', 'm² pls', 'm² galerias', 'cod postal', 'cajas', 'm² parcking']]
+        pad = pad[['nombre', 'id tienda', 'fecha apertura', 'organización', 'director explotación', 'director operacional', 'director gerente regional', 'sub region', 'director gerente tienda', 'provincia tableau', 'm² salón', 'm² pgc', 'm² pft', 'm² bazar', 'm² electro', 'm² textil', 'm² pls', 'm² galerias', 'cod postal', 'cajas', 'm² parcking', 'estado']]
 
         # Convierto el codigo postal a String ya que es alfanumerico
         pad['cod postal'] = pad['cod postal'].astype(str)
+
+        pad['fecha apertura'] = pd.to_datetime(pad['fecha apertura'], format='%Y/%m/%d', errors='coerce')
 
         # Genero una nueva columna para identificar la ultima fecha de actualizacion de las tiendas
         pad['modificacion'] = datetime.today().strftime('%d/%m/%Y')
@@ -2750,10 +2754,13 @@ def padron_marketshare(padron_data):
 
         # Reseteo y quito Indice indeseado
         pad = pad.reset_index(drop=True)
-    
+
         # Realizo una transformacion para Normalizar valores de las provincias
         pad['provincia tableau'] = pad['provincia tableau'].str.strip().str.upper()
         pad['provincia tableau'] = np.where(pad['provincia tableau'] == 'NEUQUÉN', 'NEUQUEN', pad['provincia tableau'])
+
+        #Remplazo cualquier guion por nans
+        pad = pad.replace('-', np.nan)
 
         return pad
     
@@ -2765,9 +2772,9 @@ def crear_tabla_si_no_existe(df: pd.DataFrame, table_id: str, project_id: str):
 
     try:
         client.get_table(table_id)
-        print(f"✅ La tabla {table_id} ya existe")
+        return f"✅ La tabla {table_id} ya existe"
     except NotFound:
-        print(f"⚠️ La tabla {table_id} no existe. Creándola...")
+        return f"⚠️ La tabla {table_id} no existe. Creándola..."
 
         job_config = bigquery.LoadJobConfig(
             write_disposition="WRITE_EMPTY"
@@ -2780,27 +2787,32 @@ def crear_tabla_si_no_existe(df: pd.DataFrame, table_id: str, project_id: str):
         )
 
         load_job.result()
-        print(f"✅ Tabla {table_id} creada correctamente.")
+        return f"✅ Tabla {table_id} creada correctamente."
 
-def carga_padron(padron, project_id='gcp-ar-cdg-datos-dev', table_id='gcp-ar-cdg-datos-dev.marketshare_project.padron'):
+def carga_padron(padron, project_id='gcp-ar-cdg-datos-dev', dataset_id='marketshare_project', table_name='padron'):
     try:
+        client = bigquery.Client(project=project_id)
+
+        # Construimos correctamente el ID completo de la tabla
+        full_table_id = f"{project_id}.{dataset_id}.{table_name}"
+
         # Paso previo: crear tabla si no existe
-        crear_tabla_si_no_existe(padron, table_id, project_id)
+        crear_tabla_si_no_existe(padron, full_table_id, project_id)
 
-        # Ahora sí: usar MethodBQ normalmente
-        bq_methods = MethodBQ(project=project_id)
-        
-        bq_methods.upsert_df_to_bigquery(
-            df=padron,
-            table_id=table_id,
-            mode='merge',
-            primary_keys=['id tienda']
+        # Configuración del job de carga
+        job_config = bigquery.LoadJobConfig(
+            autodetect=True,
+            write_disposition="WRITE_TRUNCATE"  # 👈 Sobrescribir información
         )
+        
+        # Subir el DataFrame
+        job = client.load_table_from_dataframe(padron, full_table_id, job_config=job_config)
+        job.result()
 
-        return 'Exito al cargar la información del padrón a GCP'
+        return f"✅ Éxito al cargar la información del padrón a GCP: {full_table_id}"
 
     except Exception as e:
-        return f'Error al subir el padrón a GCP: {e}'
+        return f"❌ Error al subir el padrón a GCP: {e}"
 
 def carga_share(share_data, project_id='gcp-ar-cdg-datos-dev', table_id='gcp-ar-cdg-datos-dev.marketshare_project.marketshare_data'):
     try:
