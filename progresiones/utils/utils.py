@@ -2750,6 +2750,10 @@ def padron_marketshare(padron_data):
 
         # Reseteo y quito Indice indeseado
         pad = pad.reset_index(drop=True)
+    
+        # Realizo una transformacion para Normalizar valores de las provincias
+        pad['provincia tableau'] = pad['provincia tableau'].str.strip().str.upper()
+        pad['provincia tableau'] = np.where(pad['provincia tableau'] == 'NEUQUÉN', 'NEUQUEN', pad['provincia tableau'])
 
         return pad
     
