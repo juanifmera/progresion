@@ -768,7 +768,7 @@ def genero_df_comparacion(ventas, debitos, padron, mes_comparable:str):
         #TENER CUIDADO A LA HORA DE SUBIR LA INFORMACION. EN ESTE CASO COMO VAMOS A REALIZAR UNA COMPARACION GENERAL POR TIENDA/FORMATO, NO ES NECESARIO APERTURAR EL REPORTE DE VENTAS Y VOLUMEN POR SECTOR SECCION. UNICAMENTE POR GF PARA QUITARLE LOS ENVASES AL VOLUMEN
         df_ventas_y_volumen = pd.read_csv(ventas, encoding='utf-16', header=1)
         df_debitos = pd.read_csv(debitos, encoding='utf-16', header=1, sep=',', decimal=',')
-        padron = pd.read_excel(padron, header=17) #type:ignore
+        padron = pd.read_excel(padron, header=17)
 
         # Trabajo sobre Ventas y Volumen
         #Me quedo unicamente con las columnas importantes
@@ -896,8 +896,8 @@ def genero_df_comparacion(ventas, debitos, padron, mes_comparable:str):
         df_join_sc.rename(columns={
         'mes':'fecha'
         }, inplace=True)
-        df_join_sc['mes'] = df_join_sc['fecha'].str.split(' ').str[0]
-        
+        df_join_sc['mes'] = df_join_sc['fecha'].str.split(' ').str[0] 
+
         #Genero un diccionario con los meses y sus valores numericos de forma auxiliar
         orden_meses = {"Enero":1, "Febrero":2, "Marzo":3, "Abril":4, "Mayo":5, "Junio":6, "Julio":7, "Agosto":8, "Septiembre":9, "Octubre":10, "Noviembre":11, "Diciembre":12}
 
@@ -912,20 +912,20 @@ def genero_df_comparacion(ventas, debitos, padron, mes_comparable:str):
         df_total_formato['progresion 2025'] = round((((df_total_formato[2025] / df_total_formato[2024]) - 1) * 100), 1)
 
         #Me traigo unicamente la informacion que me sirve
-        df_total_formato = df_total_formato[['mes', 'aux', 'categoria', 'progresion 2024', 'progresion 2025']]
+        df_total_formato = df_total_formato[['mes', 'aux', 2023, 2024, 2025, 'categoria', 'progresion 2024', 'progresion 2025']]
 
         #Ordeno el df
         df_total_formato = df_total_formato.sort_values('aux')
 
         #"Derrito" el df para poder generar un formato long y asi realizar un grafico con el periodo continuado desde 2024 en adelante
-        df_total_formato = df_total_formato.melt(id_vars=['mes', 'aux', 'categoria'], value_vars=['progresion 2024', 'progresion 2025'], var_name='progresiones', value_name='valores')
+        df_total_formato = df_total_formato.melt(id_vars=['mes', 'aux', 'categoria', 2023, 2024, 2025], value_vars=['progresion 2024', 'progresion 2025'], var_name='progresiones', value_name='valores')
 
-        #genero una columna de periodo concatenando el mes y el año
+        #Genero una columna de periodo concatenando el mes y el año
         df_total_formato['periodo'] = df_total_formato['aux'].astype(str).str.zfill(2) + '-' + df_total_formato['progresiones'].str.split(' ').str[1].astype(str).str[2:]
 
         df_total_formato['punto_operacional'] = 'Total Formato'
 
-        df_total_formato = df_total_formato[['punto_operacional', 'mes', 'aux', 'categoria', 'progresiones', 'valores', 'periodo']]
+        df_total_formato = df_total_formato[['punto_operacional', 'mes', 2023, 2024, 2025, 'aux', 'categoria', 'progresiones', 'valores', 'periodo']]
 
         # Agrupo por los campos que me sirven y pivoteo la info para calcular las progresiones
         df_join_sc = df_join_sc.groupby(['año', 'mes', 'aux', 'punto_operacional', 'categoria'])['valores'].sum().reset_index().pivot_table(values='valores', index=['mes', 'aux', 'punto_operacional', 'categoria'], columns='año', aggfunc='sum').reset_index()
@@ -935,15 +935,15 @@ def genero_df_comparacion(ventas, debitos, padron, mes_comparable:str):
         df_join_sc['progresion 2025'] = round((((df_join_sc[2025] / df_join_sc[2024]) - 1) * 100), 1)
 
         #Me traigo unicamente la informacion que me sirve
-        df_progresiones = df_join_sc[['punto_operacional', 'mes', 'aux', 'categoria', 'progresion 2024', 'progresion 2025']]
+        df_progresiones = df_join_sc[['punto_operacional', 'mes', 'aux', 2023, 2024, 2025, 'categoria', 'progresion 2024', 'progresion 2025']]
 
         #Ordeno el df
         df_progresiones = df_progresiones.sort_values('aux')
 
         #"Derrito" el df para poder generar un formato long y asi realizar un grafico con el periodo continuado desde 2024 en adelante
-        df_progresiones = df_progresiones.melt(id_vars=['punto_operacional', 'mes', 'aux', 'categoria'], value_vars=['progresion 2024', 'progresion 2025'], var_name='progresiones', value_name='valores')
+        df_progresiones = df_progresiones.melt(id_vars=['punto_operacional', 'mes', 2023, 2024, 2025, 'aux', 'categoria'], value_vars=['progresion 2024', 'progresion 2025'], var_name='progresiones', value_name='valores')
 
-        #genero una columna de periodo concatenando el mes y el año
+        #Genero una columna de periodo concatenando el mes y el año
         df_progresiones['periodo'] = df_progresiones['aux'].astype(str).str.zfill(2) + '-' + df_progresiones['progresiones'].str.split(' ').str[1].astype(str).str[2:]
 
         #Concateno los dos dfs finales
