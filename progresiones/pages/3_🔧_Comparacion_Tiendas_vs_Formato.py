@@ -60,13 +60,9 @@ st.subheader('Segundo Paso: Seleccion de Mes Comparable', divider='rainbow')
 st.markdown('Una vez subidos los tres archivos, seleccioná el mes a comparar.')
 
 if ventas_y_volumen and debitos and padron:
-    meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-             'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
-
-    # mes actual (si hoy es septiembre -> default agosto)
+    meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
     mes_actual = meses[datetime.today().month - 2]
-    mes = st.selectbox('Elegí un mes para calcular progresiones y acumulados:', meses,
-                       index=datetime.today().month - 2, placeholder=mes_actual)
+    mes = st.selectbox('Elegí un mes para calcular progresiones y acumulados:', meses, index=meses.index(mes_actual))
 
     calculate = st.button('Consolidar información', type='primary', use_container_width=True)
 

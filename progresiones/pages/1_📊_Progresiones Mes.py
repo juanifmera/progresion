@@ -54,10 +54,10 @@ st.markdown('Una vez que esten subidos los tres archivo, debajo aparecerá una l
 if ventas_y_volumen and debitos and padron:
     # datetime.today().month devuelve 1-12, por eso restamos 1 para el índice
     meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
-
     mes_actual = meses[datetime.today().month - 2]
 
-    mes = st.selectbox('Elegir un mes para realizar la comparabilidad de calculos para las progresiones.', meses, index=datetime.today().month - 2, placeholder=mes_actual)
+    #Corregir para los proximos meses para que el place holder siempre sea el mes anterior al actual
+    mes = st.selectbox('Elegir un mes para realizar la comparabilidad de calculos para las progresiones.', meses, index=meses.index(mes_actual))
 
     calculate = st.button('¡¡¡Calcular Progresiones MMAA!!!', type='primary', use_container_width=True)
 

@@ -54,11 +54,10 @@ if ventas_y_volumen and debitos and padron:
     col1, col2 = st.columns([2,1])
     # datetime.today().month devuelve 1-12, por eso restamos 1 para el índice
     meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
-
     mes_actual = meses[datetime.today().month - 2]
 
     with col1:
-        mes = st.selectbox('Elegir un mes para realizar la comparabilidad de calculos para las progresiones y seleccionar el periodo acumulado deseado.', meses, index=datetime.today().month - 2, placeholder=mes_actual)
+        mes = st.selectbox('Elegir un mes para realizar la comparabilidad de calculos para las progresiones y seleccionar el periodo acumulado deseado.', meses, index=meses.index(mes_actual))
 
     with col2:
         comparabilidad = st.segmented_control('Formato de Descarga', help='Se recomienda utilizar csv para Express', options=['Superficie Total', 'Superficie Comparable'], width='stretch', default='Superficie Comparable')
