@@ -53,10 +53,6 @@ def progresiones_mmaa(volumen_y_ventas, debitos, padron, mes_comparable:str):
 
         Los archivos de Ventas y Debitos se deben cargar en formato csv como salen de Micro y el padron en formato xslx (Excel Normal) desde el drive.
         '''
-        #Leo el encoding para utilziar esto en computadoras normales
-        encoding_vol = detectar_encoding(volumen_y_ventas)
-        encoding_deb = detectar_encoding(debitos)
-
         # Carga de Archivos y transformaciones generales
         df_ventas_y_volumen = pd.read_csv(volumen_y_ventas, encoding='utf-16', header=1)
         df_debitos = pd.read_csv(debitos, encoding='utf-16', header=1, sep=',', decimal=',')
@@ -105,7 +101,7 @@ def progresiones_mmaa(volumen_y_ventas, debitos, padron, mes_comparable:str):
         ventas_agrupado = ventas.groupby(['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria'])['valores'].sum().reset_index()
 
         #Quito Envases del Volumen y Agrupo
-        volumen_sin_vol = volumen[~volumen['grupo_de_familia'].str.contains('ENVASES')]
+        volumen_sin_vol = volumen[~volumen['grupo_de_familia'].isin(['ENVASES BEBIDAS', 'ENVASES PAGADOS'])]
         volumen_agrupado = volumen_sin_vol.groupby(['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria'])['valores'].sum().reset_index()
 
         # Trabajo sobre Debitos
@@ -990,44 +986,33 @@ def actualizo_df_comparacion(df_final:pd.DataFrame, tiendas:list, categoria:str)
 def obtener_join_comparable(ventas, debitos, padron, mes_comparable:str): 
     try:
         # Carga de Archivos y transformaciones generales
-        df_ventas_y_volumen = pd.read_csv(ventas, encoding='utf-16', header=1)
-        df_debitos = pd.read_csv(debitos, encoding='utf-16', header=1, sep=',', decimal=',')
-        padron = pd.read_excel(padron, header=17) #type:ignore
+        cols_venta = ['Año', 'Mes', 'Direccion', 'Punto Operacional', 'Grupo de Familia', 'Ventas c/impuesto', 'Venta en Unidades']
+        df_ventas_y_volumen = pd.read_csv(ventas, encoding='utf-16', header=1, usecols=cols_venta)
 
-        # Trabajo sobre Ventas y Volumen
-        #Me quedo unicamente con las columnas importantes
-        df_ventas_y_volumen = df_ventas_y_volumen[['Año', 'Mes', 'Direccion', 'Punto Operacional', 'Sector', 'Seccion', 'Grupo de Familia', 'Ventas c/impuesto', 'Venta en Unidades']]
+        cols_debitos = ['Año', 'Mes', 'Direccion', 'Punto Operacional', 'Cant. Tickets por Local']
+        df_debitos = pd.read_csv(debitos, encoding='utf-16', header=1, sep=',', decimal=',', usecols=cols_debitos)
+
+        cols_pad = ['GSX', 'NOMBRE', 'Fecha apertura', 'ORGANIZACIÓN ', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']
+        padron = pd.read_excel(padron, header=17, usecols=cols_pad)
 
         #Renombro las columnas
         df_ventas_y_volumen.columns = (df_ventas_y_volumen.columns.str.strip().str.lower().str.replace(" ", "_"))
-        df_ventas_y_volumen.rename(columns={
-        'ventas_c/impuesto':'venta',
-        'venta_en_unidades':'volumen'
-        }, inplace=True)
+        df_ventas_y_volumen = df_ventas_y_volumen.rename(columns={'ventas_c/impuesto':'venta', 'venta_en_unidades':'volumen'})
 
         #Genero una columna para Obtener el ID tienda
-        df_ventas_y_volumen['numero_operacional'] = df_ventas_y_volumen['punto_operacional'].str.split('-').str[0]
+        df_ventas_y_volumen['numero_operacional'] = pd.to_numeric(df_ventas_y_volumen['punto_operacional'].str.split('-').str[0], errors='coerce')
 
         #Me quedo con las columnas necesarias
-        ventas = df_ventas_y_volumen[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'sector', 'seccion', 'grupo_de_familia', 'venta']]
-        volumen = df_ventas_y_volumen[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'sector', 'seccion', 'grupo_de_familia', 'volumen']]
-
-        #Quito los NA de las columans de valores
-        ventas.dropna(subset=['venta'], how='any', inplace=True)
-        volumen.dropna(subset=['volumen'], how='any', inplace=True)
-
-        #Realizo transformaciones para quitar carateres y convertir las columnas a valores numericos
-        ventas['venta'] = ventas['venta'].str.replace('.','').str.replace(',','.').astype('float')
-        volumen['volumen'] = volumen['volumen'].str.split(',').str[0].str.replace('.','').astype('int')
+        ventas = df_ventas_y_volumen[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'grupo_de_familia', 'venta']]
+        volumen = df_ventas_y_volumen[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'grupo_de_familia', 'volumen']]
 
         #Renombro las columnas con valores de ambos DF
-        ventas.rename(columns={
-        'venta':'valores'
-        }, inplace=True)
+        ventas = ventas.rename(columns={'venta':'valores'})
+        volumen = volumen.rename(columns={'volumen':'valores'})
 
-        volumen.rename(columns={
-        'volumen':'valores'
-        }, inplace=True)
+        #Realizo transformaciones para quitar carateres y convertir las columnas a valores numericos
+        ventas['valores'] = pd.to_numeric(ventas['valores'].str.replace('.', '').str.replace(',', '.'), errors='coerce')
+        volumen['valores'] =pd.to_numeric(volumen['valores'].str.replace('.', '').str.replace(',', '.'), errors='coerce')
 
         #Categorizo los valores tanto de volumne como de Ventas
         ventas['categoria'] = 'VCT'
@@ -1037,7 +1022,9 @@ def obtener_join_comparable(ventas, debitos, padron, mes_comparable:str):
         ventas_agrupado = ventas.groupby(['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria'])['valores'].sum().reset_index()
 
         #Quito Envases del Volumen y Agrupo
-        volumen_sin_vol = volumen[~volumen['grupo_de_familia'].str.contains('ENVASES')]
+        volumen_sin_vol = volumen[~volumen['grupo_de_familia'].isin(['ENVASES PAGADOS', 'ENVASES BEBIDAS'])]
+        #Si le quito las regularizadoras, el volumnes se me chinga todo!
+        #volumen_sin_vol = volumen[~volumen['grupo_de_familia'].str.contains('REGULARIZADOR')]
         volumen_agrupado = volumen_sin_vol.groupby(['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria'])['valores'].sum().reset_index()
 
         # Trabajo sobre Debitos
@@ -1046,29 +1033,18 @@ def obtener_join_comparable(ventas, debitos, padron, mes_comparable:str):
 
         # Renombro las columnas como corresponden
         debitos_agrupados.columns = debitos_agrupados.columns.str.lower().str.replace(' ','_')
-        debitos_agrupados.rename(columns={
-        'cant._tickets_por_local':'valores'
-        }, inplace=True)
-
-        # Renombro la columna de Debitos a valores
-        debitos_agrupados['categoria'] = 'DEB'
+        debitos_agrupados = debitos_agrupados.rename(columns={'cant._tickets_por_local':'valores'})
 
         # Genero una columna Categorica
-        debitos_agrupados['numero_operacional'] = debitos_agrupados['punto_operacional'].str.split('-').str[0]
+        debitos_agrupados['categoria'] = 'DEB'
 
         # Genero columna para el ID tienda
-        debitos_agrupados = debitos_agrupados[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria', 'valores']]
-
-        # Quito nulos numericos de la columna valores
-        debitos_agrupados.dropna(subset=['valores'], how='any', inplace=True)
+        debitos_agrupados['numero_operacional'] = pd.to_numeric(debitos_agrupados['punto_operacional'].str.split('-').str[0], errors='coerce')
 
         # Convierto la columna de valores a su tipo de datos correspondiente
-        debitos_agrupados['valores'] = debitos_agrupados['valores'].str.replace('.','').astype(int)
+        debitos_agrupados['valores'] = pd.to_numeric(debitos_agrupados['valores'].str.replace('.',''), errors='coerce')
 
         # Trabajo sobre el padron
-        # Selecciono las columnas que me sirven del padron
-        padron = padron[['GSX', 'NOMBRE', 'Fecha apertura', 'ORGANIZACIÓN ', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']] #type:ignore
-
         # Cambio de nombres en el padron
         padron.columns = (
         padron.columns
@@ -1083,43 +1059,86 @@ def obtener_join_comparable(ventas, debitos, padron, mes_comparable:str):
         padron['fecha_apertura'] = padron['fecha_apertura'].dt.strftime('%d/%m/%Y')
 
         # Cambio el nombre de la columna N por "Numero Operacional"
-        padron.rename(columns={'gsx':'numero_operacional'}, inplace=True)
+        padron = padron.rename(columns={'gsx':'numero_operacional'})
+
+        # Me aseguro que la columna de fin_de_cierre sea Datetime para realizar una columna auxiliar y quitar la tiendas que esten cerradas por mas de años que causan problemas de duplicados
+        padron['fin_de_cierre'] = pd.to_datetime(padron['fin_de_cierre'], format='%m/%d/%Y', errors='coerce')
+
+        #Me aseguro que la columna de Numero Operacional sea un numero 
+        padron['numero_operacional'] = pd.to_numeric(padron['numero_operacional'], errors='coerce')
+
+        #Normalizo la columna de Direccion/Organización
+        padron['organización'] = padron['organización'].str.lower()
+
+        #Me quedo unicamente con los formatos fisicos
+        padron = padron[padron['organización'].isin(['express', 'hipermercado', 'market', 'maxi'])]
+
+        #Quito los duplicados del padron por numero operacional
+        padron['numero_operacional'] = padron['numero_operacional'].drop_duplicates(keep='first')
 
         # Quito los valores nulos utilizando como referencia la columna Numero Operacional, nombre y fecha apertura
-        padron.dropna(subset=['numero_operacional', 'nombre', 'fecha_apertura', mes_comparable[0:3].lower()], how='any', inplace=True)
+        padron = padron.dropna(subset=['numero_operacional', 'nombre', 'fecha_apertura'], how='any')
 
-        # Genero una funcion para convertir los valores de una columna a mayuscula
-        def maysc(df: pd.DataFrame, columna: str):
-            df[columna] = df[columna].str.upper()
+        #Genero una condicion vectorizada para calcular el tiempo que tienen cerradas las tiendas
+        hoy = pd.Timestamp.today().normalize()
 
-        #Aplico la formula a la columna del mes comparable para que todos los valores sean en mayuscula
-        maysc(padron, mes_comparable[0:3].lower())
+        dias_cierre = hoy - padron['fin_de_cierre']
 
-        # Coloco el numero operacional como numero
-        padron['numero_operacional'] = padron['numero_operacional'].astype(int)
+        padron['vida'] = np.select(
+            condlist=[
+                padron['fin_de_cierre'].isna(),
+                dias_cierre > pd.Timedelta(days=1095),
+                dias_cierre > pd.Timedelta(days=730),
+                dias_cierre > pd.Timedelta(days=365),
+                dias_cierre <= pd.Timedelta(days=365),
+            ],
+            choicelist=[
+                pd.NaT,
+                'Tienda cerrada por más de tres años',
+                'Tienda cerrada por más de dos años',
+                'Tienda cerrada por más de un año',
+                'Tienda cerrada por menos de un año',
+            ],
+            default=pd.NaT
+        )
 
         # Concateno todos los df (venta, debito y volumen) y lo joineo con el padron
         df = pd.concat([ventas_agrupado, volumen_agrupado, debitos_agrupados])
 
-        # Convierto el ID a numero
-        df['numero_operacional'] = df['numero_operacional'].astype(int)
+        #Normalizo columna
+        df['direccion'] = df['direccion'].str.lower()
+
+        # Me quedo con los formatos fisicos
+        df = df[df['direccion'].isin(['proximidad', 'maxi', 'hipermercado', 'market'])]
+
+        padron = padron.rename(columns={'organización':'direccion'})
+
+        padron['direccion'] = np.where(padron['direccion'] == 'express', 'proximidad', padron['direccion'])
 
         # Genero el Join del df Agupado con el Padron con el objetivo de quedarme unicamente con aquellas tiendas Comparables
-        df_join = df.merge(padron, how='left', on='numero_operacional')
+        df_join = pd.merge(left=df, right=padron, how='left', on=['numero_operacional', 'direccion'])
 
-        # Trabajo sobre Progresiones Total Formato
+        #Renombro la columna de Comparabilidad para que tenga sentido
+        df_join = df_join.rename(columns={mes_comparable[0:3].lower(): 'superficie'})
+
         # Me quedo unicamente con las columnas que me sirven del DF Joineado (ACA TENGO LA SC DEL MES)
-        df_join = df_join[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'fecha_apertura', 'fin_de_cierre', 'provincia','categoria', 'valores', mes_comparable[0:3].lower()]]
+        df_join = df_join[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'fecha_apertura', 'fin_de_cierre', 'm_salón', 'provincia','categoria', 'valores', 'superficie', 'vida']]
 
         #Renombro la Columna Mes a Fecha para Luego generar la Columna Mes Correspondiente
-        df_join.rename(columns={
-            'mes':'fecha'
-        }, inplace=True)
+        df_join = df_join.rename(columns={'mes':'fecha'})
+
+        #Genero columna de Mes
         df_join['mes'] = df_join['fecha'].str.split(' ').str[0]
 
-        df_join = df_join[['año', 'fecha', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'fecha_apertura', 'fin_de_cierre', 'provincia','categoria', 'valores', mes_comparable[0:3].lower()]].copy()
+        #Completo columna Vida
+        df_join['vida'] = df_join['vida'].fillna('Tienda Abierta')
+        
 
-        df_join_sc = df_join[df_join[mes_comparable[0:3].lower()] == 'SC'].copy()
+        #Me filtro unicamente las tiendas que son SUP COMP
+        df_join_sc = df_join[df_join['superficie'] == 'SC']
+
+        #Convierto los M2 Salon en Numero
+        df_join_sc['m_salón'] = pd.to_numeric(df_join_sc['m_salón'], errors='coerce')
 
         try:
             output = io.BytesIO()
@@ -1138,44 +1157,33 @@ def obtener_join_comparable(ventas, debitos, padron, mes_comparable:str):
 def obtener_join_no_comparable(ventas, debitos, padron, mes_comparable:str): 
     try:
         # Carga de Archivos y transformaciones generales
-        df_ventas_y_volumen = pd.read_csv(ventas, encoding='utf-16', header=1)
-        df_debitos = pd.read_csv(debitos, encoding='utf-16', header=1, sep=',', decimal=',')
-        padron = pd.read_excel(padron, header=17) #type:ignore
+        cols_venta = ['Año', 'Mes', 'Direccion', 'Punto Operacional', 'Grupo de Familia', 'Ventas c/impuesto', 'Venta en Unidades']
+        df_ventas_y_volumen = pd.read_csv(ventas, encoding='utf-16', header=1, usecols=cols_venta)
 
-        # Trabajo sobre Ventas y Volumen
-        #Me quedo unicamente con las columnas importantes
-        df_ventas_y_volumen = df_ventas_y_volumen[['Año', 'Mes', 'Direccion', 'Punto Operacional', 'Sector', 'Seccion', 'Grupo de Familia', 'Ventas c/impuesto', 'Venta en Unidades']]
+        cols_debitos = ['Año', 'Mes', 'Direccion', 'Punto Operacional', 'Cant. Tickets por Local']
+        df_debitos = pd.read_csv(debitos, encoding='utf-16', header=1, sep=',', decimal=',', usecols=cols_debitos)
+
+        cols_pad = ['GSX', 'NOMBRE', 'Fecha apertura', 'ORGANIZACIÓN ', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']
+        padron = pd.read_excel(padron, header=17, usecols=cols_pad)
 
         #Renombro las columnas
         df_ventas_y_volumen.columns = (df_ventas_y_volumen.columns.str.strip().str.lower().str.replace(" ", "_"))
-        df_ventas_y_volumen.rename(columns={
-        'ventas_c/impuesto':'venta',
-        'venta_en_unidades':'volumen'
-        }, inplace=True)
+        df_ventas_y_volumen = df_ventas_y_volumen.rename(columns={'ventas_c/impuesto':'venta', 'venta_en_unidades':'volumen'})
 
         #Genero una columna para Obtener el ID tienda
-        df_ventas_y_volumen['numero_operacional'] = df_ventas_y_volumen['punto_operacional'].str.split('-').str[0]
+        df_ventas_y_volumen['numero_operacional'] = pd.to_numeric(df_ventas_y_volumen['punto_operacional'].str.split('-').str[0], errors='coerce')
 
         #Me quedo con las columnas necesarias
-        ventas = df_ventas_y_volumen[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'sector', 'seccion', 'grupo_de_familia', 'venta']]
-        volumen = df_ventas_y_volumen[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'sector', 'seccion', 'grupo_de_familia', 'volumen']]
-
-        #Quito los NA de las columans de valores
-        ventas.dropna(subset=['venta'], how='any', inplace=True)
-        volumen.dropna(subset=['volumen'], how='any', inplace=True)
-
-        #Realizo transformaciones para quitar carateres y convertir las columnas a valores numericos
-        ventas['venta'] = ventas['venta'].str.replace('.','').str.replace(',','.').astype('float')
-        volumen['volumen'] = volumen['volumen'].str.split(',').str[0].str.replace('.','').astype('int')
+        ventas = df_ventas_y_volumen[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'grupo_de_familia', 'venta']]
+        volumen = df_ventas_y_volumen[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'grupo_de_familia', 'volumen']]
 
         #Renombro las columnas con valores de ambos DF
-        ventas.rename(columns={
-        'venta':'valores'
-        }, inplace=True)
+        ventas = ventas.rename(columns={'venta':'valores'})
+        volumen = volumen.rename(columns={'volumen':'valores'})
 
-        volumen.rename(columns={
-        'volumen':'valores'
-        }, inplace=True)
+        #Realizo transformaciones para quitar carateres y convertir las columnas a valores numericos
+        ventas['valores'] = pd.to_numeric(ventas['valores'].str.replace('.', '').str.replace(',', '.'), errors='coerce')
+        volumen['valores'] =pd.to_numeric(volumen['valores'].str.replace('.', '').str.replace(',', '.'), errors='coerce')
 
         #Categorizo los valores tanto de volumne como de Ventas
         ventas['categoria'] = 'VCT'
@@ -1185,7 +1193,9 @@ def obtener_join_no_comparable(ventas, debitos, padron, mes_comparable:str):
         ventas_agrupado = ventas.groupby(['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria'])['valores'].sum().reset_index()
 
         #Quito Envases del Volumen y Agrupo
-        volumen_sin_vol = volumen[~volumen['grupo_de_familia'].str.contains('ENVASES')]
+        volumen_sin_vol = volumen[~volumen['grupo_de_familia'].isin(['ENVASES PAGADOS', 'ENVASES BEBIDAS'])]
+        #Si le quito las regularizadoras, el volumnes se me chinga todo!
+        #volumen_sin_vol = volumen[~volumen['grupo_de_familia'].str.contains('REGULARIZADOR')]
         volumen_agrupado = volumen_sin_vol.groupby(['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria'])['valores'].sum().reset_index()
 
         # Trabajo sobre Debitos
@@ -1194,29 +1204,18 @@ def obtener_join_no_comparable(ventas, debitos, padron, mes_comparable:str):
 
         # Renombro las columnas como corresponden
         debitos_agrupados.columns = debitos_agrupados.columns.str.lower().str.replace(' ','_')
-        debitos_agrupados.rename(columns={
-        'cant._tickets_por_local':'valores'
-        }, inplace=True)
-
-        # Renombro la columna de Debitos a valores
-        debitos_agrupados['categoria'] = 'DEB'
+        debitos_agrupados = debitos_agrupados.rename(columns={'cant._tickets_por_local':'valores'})
 
         # Genero una columna Categorica
-        debitos_agrupados['numero_operacional'] = debitos_agrupados['punto_operacional'].str.split('-').str[0]
+        debitos_agrupados['categoria'] = 'DEB'
 
         # Genero columna para el ID tienda
-        debitos_agrupados = debitos_agrupados[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'categoria', 'valores']]
-
-        # Quito nulos numericos de la columna valores
-        debitos_agrupados.dropna(subset=['valores'], how='any', inplace=True)
+        debitos_agrupados['numero_operacional'] = pd.to_numeric(debitos_agrupados['punto_operacional'].str.split('-').str[0], errors='coerce')
 
         # Convierto la columna de valores a su tipo de datos correspondiente
-        debitos_agrupados['valores'] = debitos_agrupados['valores'].str.replace('.','').astype(int)
+        debitos_agrupados['valores'] = pd.to_numeric(debitos_agrupados['valores'].str.replace('.',''), errors='coerce')
 
         # Trabajo sobre el padron
-        # Selecciono las columnas que me sirven del padron
-        padron = padron[['GSX', 'NOMBRE', 'Fecha apertura', 'ORGANIZACIÓN ', 'M² SALÓN', 'M² PGC', 'M² PFT', 'M² BAZAR', 'M² Electro', 'M² Textil', 'M² Pls', 'M² GALERIAS', 'PROVINCIA', 'M² Parcking', 'FIN DE CIERRE', 'ENE.2', 'FEB.2', 'MAR.2', 'ABR.2', 'MAY.2', 'JUN.2', 'JUL.2', 'AGO.2', 'SEP.2', 'OCT.2', 'NOV.2', 'DIC.2']] #type:ignore
-
         # Cambio de nombres en el padron
         padron.columns = (
         padron.columns
@@ -1231,56 +1230,97 @@ def obtener_join_no_comparable(ventas, debitos, padron, mes_comparable:str):
         padron['fecha_apertura'] = padron['fecha_apertura'].dt.strftime('%d/%m/%Y')
 
         # Cambio el nombre de la columna N por "Numero Operacional"
-        padron.rename(columns={'gsx':'numero_operacional'}, inplace=True)
+        padron = padron.rename(columns={'gsx':'numero_operacional'})
+
+        # Me aseguro que la columna de fin_de_cierre sea Datetime para realizar una columna auxiliar y quitar la tiendas que esten cerradas por mas de años que causan problemas de duplicados
+        padron['fin_de_cierre'] = pd.to_datetime(padron['fin_de_cierre'], format='%m/%d/%Y', errors='coerce')
+
+        #Me aseguro que la columna de Numero Operacional sea un numero 
+        padron['numero_operacional'] = pd.to_numeric(padron['numero_operacional'], errors='coerce')
+
+        #Normalizo la columna de Direccion/Organización
+        padron['organización'] = padron['organización'].str.lower()
+
+        #Me quedo unicamente con los formatos fisicos
+        padron = padron[padron['organización'].isin(['express', 'hipermercado', 'market', 'maxi'])]
+
+        #Quito los duplicados del padron por numero operacional
+        padron['numero_operacional'] = padron['numero_operacional'].drop_duplicates(keep='first')
 
         # Quito los valores nulos utilizando como referencia la columna Numero Operacional, nombre y fecha apertura
-        padron.dropna(subset=['numero_operacional', 'nombre', 'fecha_apertura', mes_comparable[0:3].lower()], how='any', inplace=True)
+        padron = padron.dropna(subset=['numero_operacional', 'nombre', 'fecha_apertura'], how='any')
 
-        # Genero una funcion para convertir los valores de una columna a mayuscula
-        def maysc(df: pd.DataFrame, columna: str):
-            df[columna] = df[columna].str.upper()
+        #Genero una condicion vectorizada para calcular el tiempo que tienen cerradas las tiendas
+        hoy = pd.Timestamp.today().normalize()
 
-        #Aplico la formula a la columna del mes comparable para que todos los valores sean en mayuscula
-        maysc(padron, mes_comparable[0:3].lower())
+        dias_cierre = hoy - padron['fin_de_cierre']
 
-        # Coloco el numero operacional como numero
-        padron['numero_operacional'] = padron['numero_operacional'].astype(int)
+        padron['vida'] = np.select(
+            condlist=[
+                padron['fin_de_cierre'].isna(),
+                dias_cierre > pd.Timedelta(days=1095),
+                dias_cierre > pd.Timedelta(days=730),
+                dias_cierre > pd.Timedelta(days=365),
+                dias_cierre <= pd.Timedelta(days=365),
+            ],
+            choicelist=[
+                pd.NaT,
+                'Tienda cerrada por más de tres años',
+                'Tienda cerrada por más de dos años',
+                'Tienda cerrada por más de un año',
+                'Tienda cerrada por menos de un año',
+            ],
+            default=pd.NaT
+        )
 
         # Concateno todos los df (venta, debito y volumen) y lo joineo con el padron
         df = pd.concat([ventas_agrupado, volumen_agrupado, debitos_agrupados])
 
-        # Convierto el ID a numero
-        df['numero_operacional'] = df['numero_operacional'].astype(int)
+        #Normalizo columna
+        df['direccion'] = df['direccion'].str.lower()
+
+        # Me quedo con los formatos fisicos
+        df = df[df['direccion'].isin(['proximidad', 'maxi', 'hipermercado', 'market'])]
+
+        padron = padron.rename(columns={'organización':'direccion'})
+
+        padron['direccion'] = np.where(padron['direccion'] == 'express', 'proximidad', padron['direccion'])
 
         # Genero el Join del df Agupado con el Padron con el objetivo de quedarme unicamente con aquellas tiendas Comparables
-        df_join = df.merge(padron, how='left', on='numero_operacional')
+        df_join = pd.merge(left=df, right=padron, how='left', on=['numero_operacional', 'direccion'])
 
-        # Trabajo sobre Progresiones Total Formato
+        #Renombro la columna de Comparabilidad para que tenga sentido
+        df_join = df_join.rename(columns={mes_comparable[0:3].lower(): 'superficie'})
+
         # Me quedo unicamente con las columnas que me sirven del DF Joineado (ACA TENGO LA SC DEL MES)
-        df_join = df_join[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'fecha_apertura', 'fin_de_cierre', 'provincia','categoria', 'valores', mes_comparable[0:3].lower()]]
+        df_join = df_join[['año', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'fecha_apertura', 'fin_de_cierre', 'm_salón', 'provincia','categoria', 'valores', 'superficie', 'vida']]
 
         #Renombro la Columna Mes a Fecha para Luego generar la Columna Mes Correspondiente
-        df_join.rename(columns={
-            'mes':'fecha'
-        }, inplace=True)
+        df_join = df_join.rename(columns={'mes':'fecha'})
+
+        #Genero columna de Mes
         df_join['mes'] = df_join['fecha'].str.split(' ').str[0]
 
-        df_join = df_join[['año', 'fecha', 'mes', 'direccion', 'numero_operacional', 'punto_operacional', 'fecha_apertura', 'fin_de_cierre', 'provincia','categoria', 'valores', mes_comparable[0:3].lower()]].copy()
+        #Completo columna Vida
+        df_join['vida'] = df_join['vida'].fillna('Tienda Abierta')
+
+        #Convierto los M2 Salon en Numero
+        df_join['m_salón'] = pd.to_numeric(df_join['m_salón'], errors='coerce')
 
         try:
             output = io.BytesIO()
             df_join.to_csv(output, index=False, encoding="utf-16", decimal=',')
-
+            
             output.seek(0)
             return output
 
         except Exception as e:
             print(e)
             return None
-        
+
     except Exception as e:
         return f'Hubo un error en el medio del flujo/pipeline. Detalle del error: {e}'
-    
+
 def progresiones_acumulado_csv(ventas, debitos, padron, mes_comparable:str): 
     try:
         logger.info("🔁 Iniciando cálculo de progresiones acumuladas")
