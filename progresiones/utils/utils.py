@@ -1,6 +1,6 @@
 from pathlib import Path
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import plotly.express as px
 import io
 import chardet
@@ -941,6 +941,8 @@ def genero_df_comparacion(ventas, debitos, padron, mes_comparable:str):
 
         #Genero una columna de periodo concatenando el mes y el año
         df_progresiones['periodo'] = df_progresiones['aux'].astype(str).str.zfill(2) + '-' + df_progresiones['progresiones'].str.split(' ').str[1].astype(str).str[2:]
+
+        df_progresiones[[2023, 2024, 2025]] = df_progresiones[[2023, 2024, 2025]].astype(int)
 
         #Concateno los dos dfs finales
         df_final = pd.concat([df_progresiones, df_total_formato])
@@ -2584,8 +2586,6 @@ def marketshare(marketshare_data):
 
     Parametros:
     1- market_share_data --> Archivo con informacion del share de Carrefour y el resto de Competidores. (Atento a este punto ya que para cargar de forma correcta este archivo primero se deben limpiar las columnas extra que trae el archivo a la izquiera y normalizar los titulos de las columnas, ya que algunas estan en datetime y otras en strings. Asegurarse de que todas las columnas sean de tipo datetime)
-
-    2- padron_data --> Archivo actualizado del padron con la ultima informacion. (Atento a este punto ya que puede sufrir modificaciones el padron y romper la Pipeline. La ultima modificacion que se le hizo al padron fue el cambio de nombre de una columna N° por GSX)
     '''
     try:
         # Cargo la Info del Share
@@ -2720,13 +2720,15 @@ def marketshare(marketshare_data):
         # Elimino las columnas auxiliares
         df = df.drop(columns=['numero_mes', 'fecha_parsed', 'fecha'])
 
-        # Genero una variable que capture la fecha en la cual se ejecuta el flujo. Obtengo los datos de la fecha, extraigo el año y el mes. Al mes le resto uno, para obtener el mes "Vencido" y asi generar una fecha que me serivirá para filtrar unicamente la informacion del mes vencido para concatenarla al historico que ya esta subido a GCP
-        fecha_actual = pd.to_datetime(datetime.today().date())
-        fecha_aux = str(fecha_actual.year) + '/' + str(fecha_actual.month - 1) + '/' + '01'
-        fecha_comparable = pd.to_datetime(fecha_aux, format='%Y/%m/%d')
-        
+        # Genero una variable que capture la fecha en la cual se ejecuta el flujo y le resto 28 dias para obtener el mes, y año correcta para filtrar la informacion y que solamente se suba la informacion del mes vencido a la tabla de GCP para no arruinar el historico.
+        fecha_pivot = pd.to_datetime(datetime.today().date()) - timedelta(days=28)
+
+        # Tomo la info de la fecha pivot y en cambio de quedarme con el dia, le coloco siempre a la fecha el primero de cada mes para que sea comparable con el reporte de Sentia
+        fecha_pivot = pd.to_datetime(str(fecha_pivot.year) + '/' + str(fecha_pivot.month)+ '/01', errors='coerce', format='%Y/%m/%d')
+
         # Filtro la informacion y me quedo unicamente con la informacion del mes que voy a concatenar al Historico
-        df = df[df['fecha_final'] == fecha_comparable]
+        df['fecha_final'] = pd.to_datetime(df['fecha_final'], errors='coerce', format='%Y/%m/%d')
+        df = df[df['fecha_final'] == fecha_pivot]
 
         return df
 
